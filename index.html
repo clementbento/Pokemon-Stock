@@ -381,10 +381,10 @@
   <div class="modal-box">
     <h3>⚠️ Carte déjà présente</h3>
     <p>Cette carte existe déjà dans ton stock avec une quantité de <span class="existing-qty" id="dupeQty">0</span>.</p>
-    <p>Veux-tu quand même l'ajouter comme nouvelle ligne ?</p>
+    <p>Veux-tu ajouter la quantité saisie à cette carte existante ?</p>
     <div class="modal-actions">
       <button class="btn btn-ghost" id="dupeCancelBtn">Annuler</button>
-      <button class="btn btn-primary" id="dupeConfirmBtn">Ajouter quand même</button>
+      <button class="btn btn-primary" id="dupeConfirmBtn">Ajouter la quantité</button>
     </div>
   </div>
 </div>
@@ -407,7 +407,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js";
 import {
   getFirestore, collection, addDoc, getDocs, query, orderBy, limit,
-  writeBatch, doc, deleteDoc, serverTimestamp
+  writeBatch, doc, deleteDoc, updateDoc, increment, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
 
 const BDD_MAP_URL = "bdd_map.json";
@@ -419,6 +419,7 @@ let allCards = []; // { id, collection, serie, numCarte, carte, langue, version,
 let sortKey = 'collection';
 let sortDir = 1;
 let pendingCardData = null; // stocke la carte en attente de confirmation depuis la modale de doublon
+let pendingExistingCard = null; // stocke la carte déjà en stock correspondant au doublon
 
 const statTotal = document.getElementById('statTotal');
 const setupBox = document.getElementById('setupBox');
@@ -483,6 +484,7 @@ function openDupeModal(existingCard){
 function closeDupeModal(){
   dupeModal.classList.remove('show');
   pendingCardData = null;
+  pendingExistingCard = null;
   submitBtn.disabled = false;
 }
 
@@ -639,7 +641,7 @@ if(firebaseConfig.apiKey.includes("TON-API-KEY") || firebaseConfig.apiKey.includ
     });
   });
 
-  // Enregistre réellement la carte en base (appelé directement, ou après confirmation de doublon)
+  // Enregistre réellement la carte en base (crée une nouvelle ligne)
   async function saveCard(cardData){
     submitBtn.disabled = true;
     try{
@@ -653,7 +655,26 @@ if(firebaseConfig.apiKey.includes("TON-API-KEY") || firebaseConfig.apiKey.includ
       return;
     }
     submitBtn.disabled = false;
+    finishSubmit();
+  }
 
+  // Ajoute la quantité à une carte déjà existante au lieu de créer une nouvelle ligne
+  async function addQuantityToExisting(existingCard, addedQuantite){
+    submitBtn.disabled = true;
+    try{
+      await updateDoc(doc(db, 'stock', existingCard.id), {
+        quantite: increment(addedQuantite)
+      });
+    }catch(err){
+      errMsg.textContent = "Erreur lors de la mise à jour de la quantité : " + err.message;
+      submitBtn.disabled = false;
+      return;
+    }
+    submitBtn.disabled = false;
+    finishSubmit();
+  }
+
+  function finishSubmit(){
     okMsg.classList.add('show');
     setTimeout(()=>okMsg.classList.remove('show'), 1400);
 
@@ -662,7 +683,7 @@ if(firebaseConfig.apiKey.includes("TON-API-KEY") || firebaseConfig.apiKey.includ
     document.getElementById('quantite').value = 1;
     document.getElementById('nomCarte').focus();
 
-    await refreshAll();
+    refreshAll();
   }
 
   cardForm.addEventListener('submit', async e => {
@@ -690,6 +711,7 @@ if(firebaseConfig.apiKey.includes("TON-API-KEY") || firebaseConfig.apiKey.includ
     const doublon = findDuplicate(cardData);
     if(doublon){
       pendingCardData = cardData;
+      pendingExistingCard = doublon;
       submitBtn.disabled = true;
       openDupeModal(doublon);
       return;
@@ -704,10 +726,12 @@ if(firebaseConfig.apiKey.includes("TON-API-KEY") || firebaseConfig.apiKey.includ
 
   dupeConfirmBtn.addEventListener('click', async () => {
     const cardData = pendingCardData;
+    const existingCard = pendingExistingCard;
     dupeModal.classList.remove('show');
     pendingCardData = null;
-    if(cardData){
-      await saveCard(cardData);
+    pendingExistingCard = null;
+    if(cardData && existingCard){
+      await addQuantityToExisting(existingCard, cardData.quantite);
     }
   });
 

@@ -166,6 +166,22 @@
   .row-del-btn:disabled{opacity:.25; cursor:not-allowed;}
   .add-row-btn{margin-bottom:18px;}
 
+  /* ── VUE "VÉRIFIER CARTES" ────────────────────────────────── */
+  .check-hint{font-size:12px; color:var(--muted); line-height:1.6; margin:0 0 18px; max-width:640px;}
+  .check-summary{display:flex; gap:12px; flex-wrap:wrap;}
+  .check-chip{
+    font-family:'IBM Plex Mono',monospace; font-size:13px; padding:9px 16px; border-radius:10px;
+    border:2px solid; font-weight:700;
+  }
+  .check-chip.new{color:var(--grass); border-color:var(--grass); background:rgba(76,175,109,.08);}
+  .check-chip.dupe{color:var(--poke-yellow); border-color:var(--poke-yellow-dim); background:rgba(255,203,5,.08);}
+  .status-badge{
+    font-family:'IBM Plex Mono',monospace; font-size:11px; padding:4px 9px; border-radius:7px;
+    font-weight:700; white-space:nowrap; display:inline-block;
+  }
+  .status-badge.new{color:var(--grass); background:rgba(76,175,109,.14);}
+  .status-badge.dupe{color:var(--poke-yellow); background:rgba(255,203,5,.14);}
+
   /* ── VUE "MON STOCK" façon tableur ────────────────────────── */
   .stock-toolbar{display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap;}
   .stock-toolbar input[type=search]{max-width:260px;}
@@ -255,6 +271,7 @@
 
     <nav class="tabs">
       <button class="tab-btn active" id="tabAdd" data-view="view-add">+ Ajouter des cartes</button>
+      <button class="tab-btn" id="tabCheck" data-view="view-check">🔍 Vérifier cartes</button>
       <button class="tab-btn" id="tabStock" data-view="view-stock">📋 Mon stock</button>
     </nav>
 
@@ -281,6 +298,45 @@
         <div class="import-row" style="margin-top:18px; padding-top:16px; border-top:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
           <div class="hint" style="font-size:12px; color:var(--muted); max-width:480px; line-height:1.5;">À utiliser une seule fois : importe tes cartes déjà présentes dans ton ancien fichier Excel (stock_seed.json) vers la base en ligne.</div>
           <button class="btn btn-ghost" id="importBtn">Importer mon stock existant</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- VUE : VÉRIFIER CARTES -->
+    <div class="view" id="view-check">
+      <div class="panel">
+        <h2><span class="dot" style="background:var(--psychic)"></span>Vérifier des cartes</h2>
+        <p class="check-hint">Renseigne une liste de cartes pour voir combien sont déjà dans ton stock et combien sont nouvelles. Rien n'est enregistré ici.</p>
+        <form id="checkForm">
+          <div id="checkRowsContainer"></div>
+
+          <button type="button" class="btn btn-ghost add-row-btn" id="addCheckRowBtn">+ Ajouter une ligne</button>
+
+          <div class="submit-row">
+            <button type="submit" class="btn btn-primary" id="checkBtn">🔍 Vérifier la carte</button>
+          </div>
+          <div class="err-msg" id="checkErrMsg"></div>
+        </form>
+
+        <div id="checkResults" style="display:none; margin-top:22px; padding-top:18px; border-top:1px solid var(--border);">
+          <div class="check-summary" id="checkSummary"></div>
+          <div class="sheet-scroll" style="margin-top:14px;">
+            <table class="sheet" id="checkTable">
+              <thead>
+                <tr>
+                  <th>Collection</th>
+                  <th>Série</th>
+                  <th>N°</th>
+                  <th>Carte</th>
+                  <th>Langue</th>
+                  <th>Version</th>
+                  <th>Qté</th>
+                  <th>Statut</th>
+                </tr>
+              </thead>
+              <tbody id="checkBody"></tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
@@ -422,9 +478,20 @@ const rowsContainer = document.getElementById('rowsContainer');
 const addRowBtn = document.getElementById('addRowBtn');
 
 const tabAdd = document.getElementById('tabAdd');
+const tabCheck = document.getElementById('tabCheck');
 const tabStock = document.getElementById('tabStock');
 const viewAdd = document.getElementById('view-add');
+const viewCheck = document.getElementById('view-check');
 const viewStock = document.getElementById('view-stock');
+
+const checkForm = document.getElementById('checkForm');
+const checkRowsContainer = document.getElementById('checkRowsContainer');
+const addCheckRowBtn = document.getElementById('addCheckRowBtn');
+const checkBtn = document.getElementById('checkBtn');
+const checkErrMsg = document.getElementById('checkErrMsg');
+const checkResults = document.getElementById('checkResults');
+const checkSummary = document.getElementById('checkSummary');
+const checkBody = document.getElementById('checkBody');
 const stockSearch = document.getElementById('stockSearch');
 const stockBody = document.getElementById('stockBody');
 const stockCount = document.getElementById('stockCount');
@@ -453,14 +520,20 @@ function findDuplicateInStock(cardData){
   return allCards.find(c => sameCard(c, cardData));
 }
 
-// ── Navigation entre les deux pages ──────────────────────────
+// ── Navigation entre les pages ────────────────────────────────
+const VIEW_TABS = [
+  { view: viewAdd, tab: tabAdd, id: 'view-add' },
+  { view: viewCheck, tab: tabCheck, id: 'view-check' },
+  { view: viewStock, tab: tabStock, id: 'view-stock' }
+];
 function switchView(viewId){
-  [viewAdd, viewStock].forEach(v => v.classList.remove('active'));
-  [tabAdd, tabStock].forEach(t => t.classList.remove('active'));
-  document.getElementById(viewId).classList.add('active');
-  (viewId === 'view-add' ? tabAdd : tabStock).classList.add('active');
+  VIEW_TABS.forEach(({view, tab, id}) => {
+    view.classList.toggle('active', id === viewId);
+    tab.classList.toggle('active', id === viewId);
+  });
 }
 tabAdd.addEventListener('click', () => switchView('view-add'));
+tabCheck.addEventListener('click', () => switchView('view-check'));
 tabStock.addEventListener('click', () => switchView('view-stock'));
 
 if(firebaseConfig.apiKey.includes("TON-API-KEY") || firebaseConfig.apiKey.includes("YOUR-API-KEY")){
@@ -508,7 +581,8 @@ if(firebaseConfig.apiKey.includes("TON-API-KEY") || firebaseConfig.apiKey.includ
       bddMap = await res.json();
     }catch(e){ bddMap = {}; }
     populateDatalists();
-    if(!rowsContainer.querySelector('.card-row')) addRow();
+    if(!rowsContainer.querySelector('.card-row')) addManager.addRow();
+    if(!checkRowsContainer.querySelector('.card-row')) checkManager.addRow();
     await refreshAll();
   }
 
@@ -579,55 +653,77 @@ if(firebaseConfig.apiKey.includes("TON-API-KEY") || firebaseConfig.apiKey.includ
     </div>`;
   }
 
-  function addRow(prefill = {}){
-    rowIdCounter++;
-    const wrapper = document.createElement('div');
-    wrapper.innerHTML = rowTemplate(rowIdCounter, prefill).trim();
-    const rowEl = wrapper.firstChild;
-    rowsContainer.appendChild(rowEl);
-    rowEl.querySelector('.row-del-btn').addEventListener('click', () => removeRow(rowEl));
-    refreshRowChrome();
-    rowEl.querySelector('.f-collection').focus();
+  // Fabrique un gestionnaire de lignes indépendant pour un conteneur donné
+  // (réutilisé par le formulaire "Ajouter" et le formulaire "Vérifier").
+  function createRowManager(containerEl, submitBtnEl, singularLabel, pluralLabelFn){
+    function addRow(prefill = {}){
+      rowIdCounter++;
+      const wrapper = document.createElement('div');
+      wrapper.innerHTML = rowTemplate(rowIdCounter, prefill).trim();
+      const rowEl = wrapper.firstChild;
+      containerEl.appendChild(rowEl);
+      rowEl.querySelector('.row-del-btn').addEventListener('click', () => removeRow(rowEl));
+      refreshChrome();
+      rowEl.querySelector('.f-collection').focus();
+    }
+
+    function removeRow(rowEl){
+      rowEl.remove();
+      if(!containerEl.querySelector('.card-row')) addRow();
+      refreshChrome();
+    }
+
+    function refreshChrome(){
+      const rows = containerEl.querySelectorAll('.card-row');
+      rows.forEach((row, i) => {
+        row.querySelector('.card-row-num').textContent = 'Carte ' + (i + 1);
+        row.querySelector('.row-del-btn').disabled = rows.length <= 1;
+      });
+      if(submitBtnEl) submitBtnEl.textContent = rows.length <= 1 ? singularLabel : pluralLabelFn(rows.length);
+    }
+
+    function getLastValues(){
+      const rows = containerEl.querySelectorAll('.card-row');
+      if(!rows.length) return {};
+      const last = rows[rows.length - 1];
+      return {
+        collection: last.querySelector('.f-collection').value.trim(),
+        serie: last.querySelector('.f-serie').value.trim()
+      };
+    }
+
+    function collectRows(){
+      return Array.from(containerEl.querySelectorAll('.card-row')).map(row => ({
+        collection: row.querySelector('.f-collection').value.trim(),
+        serie: row.querySelector('.f-serie').value.trim(),
+        numCarte: row.querySelector('.f-num').value.trim(),
+        carte: row.querySelector('.f-nom').value.trim(),
+        langue: row.querySelector('.f-langue').value,
+        version: row.querySelector('.f-version').value,
+        quantite: Number(row.querySelector('.f-qte').value) || 1
+      }));
+    }
+
+    return { addRow, removeRow, getLastValues, collectRows };
   }
 
-  function removeRow(rowEl){
-    rowEl.remove();
-    if(!rowsContainer.querySelector('.card-row')) addRow();
-    refreshRowChrome();
-  }
+  const addManager = createRowManager(
+    rowsContainer, submitBtn,
+    '+ Enregistrer la carte',
+    n => `+ Enregistrer les ${n} cartes`
+  );
+  const checkManager = createRowManager(
+    checkRowsContainer, checkBtn,
+    '🔍 Vérifier la carte',
+    n => `🔍 Vérifier les ${n} cartes`
+  );
 
-  function refreshRowChrome(){
-    const rows = rowsContainer.querySelectorAll('.card-row');
-    rows.forEach((row, i) => {
-      row.querySelector('.card-row-num').textContent = 'Carte ' + (i + 1);
-      row.querySelector('.row-del-btn').disabled = rows.length <= 1;
-    });
-    submitBtn.textContent = rows.length <= 1 ? '+ Enregistrer la carte' : `+ Enregistrer les ${rows.length} cartes`;
-  }
-
-  function getLastRowValues(){
-    const rows = rowsContainer.querySelectorAll('.card-row');
-    if(!rows.length) return {};
-    const last = rows[rows.length - 1];
-    return {
-      collection: last.querySelector('.f-collection').value.trim(),
-      serie: last.querySelector('.f-serie').value.trim()
-    };
-  }
-
-  function collectRowsData(){
-    return Array.from(rowsContainer.querySelectorAll('.card-row')).map(row => ({
-      collection: row.querySelector('.f-collection').value.trim(),
-      serie: row.querySelector('.f-serie').value.trim(),
-      numCarte: row.querySelector('.f-num').value.trim(),
-      carte: row.querySelector('.f-nom').value.trim(),
-      langue: row.querySelector('.f-langue').value,
-      version: row.querySelector('.f-version').value,
-      quantite: Number(row.querySelector('.f-qte').value) || 1
-    }));
-  }
-
-  addRowBtn.addEventListener('click', () => addRow(getLastRowValues()));
+  addRowBtn.addEventListener('click', () => addManager.addRow(addManager.getLastValues()));
+  addCheckRowBtn.addEventListener('click', () => {
+    checkManager.addRow(checkManager.getLastValues());
+    checkResults.style.display = 'none';
+  });
+  checkRowsContainer.addEventListener('input', () => { checkResults.style.display = 'none'; });
 
   // Recharge le total + le tableau complet depuis Firestore
   async function refreshAll(){
@@ -750,7 +846,7 @@ if(firebaseConfig.apiKey.includes("TON-API-KEY") || firebaseConfig.apiKey.includ
     setTimeout(()=>okMsg.classList.remove('show'), 2400);
 
     rowsContainer.innerHTML = '';
-    addRow(lastVals);
+    addManager.addRow(lastVals);
 
     refreshAll();
   }
@@ -759,7 +855,7 @@ if(firebaseConfig.apiKey.includes("TON-API-KEY") || firebaseConfig.apiKey.includ
     e.preventDefault();
     errMsg.textContent = '';
 
-    const rows = collectRowsData();
+    const rows = addManager.collectRows();
     const invalidIndex = rows.findIndex(r => !r.collection || !r.serie || !r.carte);
     if(invalidIndex !== -1){
       errMsg.textContent = `Merci de renseigner au moins la Collection, la Série et le nom de la carte pour la carte n°${invalidIndex + 1}.`;
@@ -768,13 +864,60 @@ if(firebaseConfig.apiKey.includes("TON-API-KEY") || firebaseConfig.apiKey.includ
 
     submitBtn.disabled = true;
     try{
-      const lastVals = getLastRowValues();
+      const lastVals = addManager.getLastValues();
       const { newCount, mergedCount } = await saveMultipleCards(rows);
       finishSubmit(newCount, mergedCount, lastVals);
     }catch(err){
       errMsg.textContent = "Erreur lors de l'ajout : " + err.message;
     }
     submitBtn.disabled = false;
+  });
+
+  // ── Vérification (lecture seule, rien n'est enregistré) ────
+  checkForm.addEventListener('submit', e => {
+    e.preventDefault();
+    checkErrMsg.textContent = '';
+
+    const rows = checkManager.collectRows();
+    const invalidIndex = rows.findIndex(r => !r.collection || !r.serie || !r.carte);
+    if(invalidIndex !== -1){
+      checkErrMsg.textContent = `Merci de renseigner au moins la Collection, la Série et le nom de la carte pour la carte n°${invalidIndex + 1}.`;
+      checkResults.style.display = 'none';
+      return;
+    }
+
+    let newCount = 0, dupeCount = 0;
+    const results = rows.map(r => {
+      const existing = findDuplicateInStock(r);
+      if(existing){
+        dupeCount++;
+        return { ...r, status: 'dupe', existingQty: Number(existing.quantite) || 0 };
+      }
+      newCount++;
+      return { ...r, status: 'new' };
+    });
+
+    checkSummary.innerHTML = `
+      <span class="check-chip new">${newCount} nouvelle${newCount > 1 ? 's' : ''}</span>
+      <span class="check-chip dupe">${dupeCount} déjà en stock</span>
+    `;
+
+    checkBody.innerHTML = results.map(r => `
+      <tr>
+        <td>${escapeHtml(r.collection)}</td>
+        <td>${escapeHtml(r.serie)}</td>
+        <td>${escapeHtml(r.numCarte || '—')}</td>
+        <td>${escapeHtml(r.carte)}</td>
+        <td>${escapeHtml(r.langue)}</td>
+        <td>${escapeHtml(r.version)}</td>
+        <td class="num">${r.quantite}</td>
+        <td>${r.status === 'new'
+          ? '<span class="status-badge new">Nouvelle</span>'
+          : `<span class="status-badge dupe">Déjà en stock (qté : ${r.existingQty})</span>`}</td>
+      </tr>
+    `).join('');
+
+    checkResults.style.display = 'block';
   });
 
   importBtn.addEventListener('click', async () => {

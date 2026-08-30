@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mon Classeur Pokémon</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#12141a;
+    --panel:#1b1e27;
+    --panel-alt:#21242f;
+    --paper:#f4efe1;
+    --text:#eee9dc;
+    --muted:#8790a3;
+    --border:#2c303c;
+    --ember:#e2622b;
+    --ember-dim:#a8481f;
+    --holo1:#7f7fe0;
+    --holo2:#48c9b0;
+    --grass:#4caf6d;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--ink);
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    min-height:100vh;
+    background-image:
+      radial-gradient(circle at 15% 0%, rgba(127,127,224,0.08), transparent 40%),
+      radial-gradient(circle at 85% 10%, rgba(72,201,176,0.06), transparent 45%);
+  }
+  .wrap{max-width:920px;margin:0 auto;padding:28px 20px 80px;}
+
+  .eyebrow{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11px;
+    letter-spacing:.18em;
+    color:var(--holo2);
+    text-transform:uppercase;
+    margin:0 0 6px;
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .live-dot{width:6px;height:6px;border-radius:50%;background:var(--grass); box-shadow:0 0 0 rgba(76,175,109,.6); animation:pulse 2s infinite;}
+  @keyframes pulse{
+    0%{box-shadow:0 0 0 0 rgba(76,175,109,.5);}
+    70%{box-shadow:0 0 0 6px rgba(76,175,109,0);}
+    100%{box-shadow:0 0 0 0 rgba(76,175,109,0);}
+  }
+  header{
+    display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:14px;
+    padding-bottom:18px; margin-bottom:22px; position:relative;
+  }
+  header::after{
+    content:""; position:absolute; left:0;right:0;bottom:0; height:2px;
+    background:linear-gradient(90deg,var(--ember),var(--holo1) 45%,var(--holo2) 75%, transparent);
+    opacity:.8;
+  }
+  h1{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:30px; margin:0; letter-spacing:-.01em;}
+  .statchip{
+    font-family:'IBM Plex Mono',monospace; background:var(--panel); border:1px solid var(--border);
+    border-radius:10px; padding:10px 16px; text-align:right; min-width:150px;
+  }
+  .statchip .n{display:block; font-size:22px; font-weight:600; color:var(--paper); transition:transform .25s ease;}
+  .statchip .n.bump{transform:scale(1.18);}
+  .statchip .l{font-size:10px;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;}
+
+  .setup{border:2px dashed var(--border); border-radius:16px; padding:32px 24px; background:var(--panel);}
+  .setup h2{font-family:'Space Grotesk',sans-serif; font-size:18px; margin:0 0 10px;}
+  .setup p{color:var(--muted); font-size:14px; line-height:1.6;}
+  .setup code{background:var(--panel-alt); padding:2px 6px; border-radius:4px; font-family:'IBM Plex Mono',monospace; font-size:12.5px;}
+
+  .app{display:none;}
+  .app.active{display:block;}
+  .grid{display:grid; grid-template-columns:1.15fr .85fr; gap:20px; align-items:start;}
+  @media (max-width:720px){ .grid{grid-template-columns:1fr;} }
+
+  .panel{background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:22px;}
+  .panel h2{font-family:'Space Grotesk',sans-serif; font-size:16px; margin:0 0 18px; display:flex; align-items:center; gap:8px;}
+  .panel h2 .dot{width:7px;height:7px;border-radius:50%;background:var(--grass); display:inline-block;}
+
+  label{display:block; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin:0 0 6px; font-family:'IBM Plex Mono',monospace;}
+  .field{margin-bottom:16px;}
+  .row2{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
+  input[type=text], input[type=number], select{
+    width:100%; background:var(--panel-alt); border:1px solid var(--border); color:var(--text);
+    font-family:'Inter',sans-serif; font-size:14px; padding:10px 12px; border-radius:8px; outline:none;
+    transition:border-color .15s ease;
+  }
+  input:focus, select:focus{border-color:var(--holo1);}
+  select{appearance:none; background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%); background-position:calc(100% - 18px) center, calc(100% - 13px) center; background-size:5px 5px,5px 5px; background-repeat:no-repeat;}
+
+  .btn{font-family:'Inter',sans-serif; font-weight:600; font-size:14px; border:none; border-radius:9px; padding:12px 22px; cursor:pointer; transition:filter .15s ease, transform .1s ease;}
+  .btn:active{transform:scale(.98);}
+  .btn-primary{background:var(--ember); color:#fff;}
+  .btn-primary:hover{filter:brightness(1.08);}
+  .btn-primary:disabled{background:#4a4038; color:#8a8078; cursor:not-allowed;}
+  .btn-ghost{background:transparent; color:var(--muted); border:1px solid var(--border); font-size:12.5px; padding:8px 14px;}
+  .btn-ghost:hover{color:var(--text); border-color:var(--muted);}
+
+  .submit-row{display:flex; align-items:center; gap:12px; margin-top:6px;}
+  .ok-msg{font-size:13px; color:var(--grass); font-family:'IBM Plex Mono',monospace; opacity:0; transition:opacity .3s ease;}
+  .ok-msg.show{opacity:1;}
+  .err-msg{font-size:13px; color:#f2b9a0; font-family:'IBM Plex Mono',monospace; margin-top:8px;}
+
+  .slot-list{display:flex; flex-direction:column; gap:10px; max-height:520px; overflow-y:auto;}
+  .slot-empty{color:var(--muted); font-size:13px; font-style:italic;}
+  .slot{background:var(--panel-alt); border:1px solid var(--border); border-left:4px solid var(--holo1); border-radius:8px; padding:10px 12px; animation:slide-in .35s ease;}
+  @keyframes slide-in{ from{opacity:0; transform:translateX(14px);} to{opacity:1; transform:translateX(0);} }
+  .slot .name{font-weight:600; font-size:14px; color:var(--paper);}
+  .slot .meta{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted); margin-top:3px;}
+
+  .import-row{margin-top:18px; padding-top:16px; border-top:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;}
+  .import-row .hint{font-size:12px; color:var(--muted); max-width:480px; line-height:1.5;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <p class="eyebrow"><span class="live-dot"></span>Connecté à ta base en ligne</p>
+      <h1>Mon Classeur Pokémon</h1>
+    </div>
+    <div class="statchip">
+      <span class="n" id="statTotal">–</span>
+      <span class="l">cartes en stock</span>
+    </div>
+  </header>
+
+  <!-- SETUP STATE : affiché si la config Firebase n'est pas renseignée -->
+  <div class="setup" id="setupBox" style="display:none;">
+    <h2>Configuration requise</h2>
+    <p>Ouvre <code>index.html</code> dans un éditeur de texte et remplace l'objet <code>firebaseConfig</code> tout en haut du script par celui de ton projet Firebase (Project Settings → tes applications → objet de configuration SDK). Recharge ensuite la page.</p>
+  </div>
+
+  <!-- APP STATE -->
+  <div class="app" id="app">
+    <div class="grid">
+
+      <div class="panel">
+        <h2><span class="dot"></span>Ajouter une carte</h2>
+        <form id="cardForm">
+          <div class="row2">
+            <div class="field">
+              <label for="collection">Collection</label>
+              <input type="text" id="collection" list="collectionList" placeholder="Ex : Ecarlate et Violet" required>
+              <datalist id="collectionList"></datalist>
+            </div>
+            <div class="field">
+              <label for="serie">Série</label>
+              <input type="text" id="serie" list="serieList" placeholder="Ex : Flamme Blanche" required>
+              <datalist id="serieList"></datalist>
+            </div>
+          </div>
+
+          <div class="row2">
+            <div class="field">
+              <label for="numCarte">N° carte</label>
+              <input type="text" id="numCarte" placeholder="Ex : 43">
+            </div>
+            <div class="field">
+              <label for="nomCarte">Nom de la carte</label>
+              <input type="text" id="nomCarte" placeholder="Ex : Sidérella" required>
+            </div>
+          </div>
+
+          <div class="row2">
+            <div class="field">
+              <label for="langue">Langue</label>
+              <select id="langue">
+                <option value="FR" selected>FR</option>
+                <option value="EN">EN</option>
+                <option value="JP">JP</option>
+                <option value="US">US</option>
+                <option value="IT">IT</option>
+                <option value="DE">DE</option>
+                <option value="ES">ES</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="version">Version</label>
+              <select id="version">
+                <option value="Standard" selected>Standard</option>
+                <option value="Reverse">Reverse</option>
+                <option value="Holo">Holo</option>
+                <option value="Full Art">Full Art</option>
+                <option value="Secrète">Secrète</option>
+                <option value="Promo">Promo</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field" style="max-width:140px;">
+            <label for="quantite">Quantité</label>
+            <input type="number" id="quantite" value="1" min="1" required>
+          </div>
+
+          <div class="submit-row">
+            <button type="submit" class="btn btn-primary" id="submitBtn">+ Ajouter au classeur</button>
+            <span class="ok-msg" id="okMsg">Carte ajoutée ✓</span>
+          </div>
+          <div class="err-msg" id="errMsg"></div>
+        </form>
+
+        <div class="import-row">
+          <div class="hint">À utiliser une seule fois : importe tes cartes déjà présentes dans ton ancien fichier Excel (stock_seed.json) vers la base en ligne.</div>
+          <button class="btn btn-ghost" id="importBtn">Importer mon stock existant</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2><span class="dot" style="background:var(--holo2)"></span>Derniers ajouts</h2>
+        <div class="slot-list" id="slotList">
+          <div class="slot-empty">Chargement…</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<script type="module">
+// ─── CONFIGURATION ──────────────────────────────────────────────
+// Remplace cet objet par celui de ton projet Firebase
+// (Project Settings → Your apps → SDK setup and configuration)
+const firebaseConfig = {
+  apiKey: "AIzaSyAF-swuqm4XFf2nzlBmTcJKCbPrmlII3zk",
+  authDomain: "pokemon-stock-49d81.firebaseapp.com",
+  projectId: "pokemon-stock-49d81",
+  storageBucket: "pokemon-stock-49d81.firebasestorage.app",
+  messagingSenderId: "6621564022",
+  appId: "1:6621564022:web:1bc9a57e393d8924eca357"
+};
+// ─────────────────────────────────────────────────────────────────
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
+import {
+  getFirestore, collection, addDoc, getDocs, query, orderBy, limit,
+  writeBatch, doc, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
+
+const BDD_MAP_URL = "bdd_map.json";
+const SEED_URL = "stock_seed.json";
+
+let db = null;
+let bddMap = {};
+
+const statTotal = document.getElementById('statTotal');
+const setupBox = document.getElementById('setupBox');
+const app = document.getElementById('app');
+const cardForm = document.getElementById('cardForm');
+const slotList = document.getElementById('slotList');
+const okMsg = document.getElementById('okMsg');
+const errMsg = document.getElementById('errMsg');
+const submitBtn = document.getElementById('submitBtn');
+const importBtn = document.getElementById('importBtn');
+const collectionInput = document.getElementById('collection');
+const serieInput = document.getElementById('serie');
+const collectionList = document.getElementById('collectionList');
+const serieList = document.getElementById('serieList');
+
+function escapeHtml(str){
+  return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function hashStr(s){
+  let h=0;
+  for(let i=0;i<s.length;i++) h = (h*31 + s.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+async function init(){
+  if(firebaseConfig.apiKey.includes("YOUR-API-KEY")){
+    setupBox.style.display = 'block';
+    return;
+  }
+  const fbApp = initializeApp(firebaseConfig);
+  db = getFirestore(fbApp);
+  app.classList.add('active');
+
+  try{
+    const res = await fetch(BDD_MAP_URL);
+    bddMap = await res.json();
+  }catch(e){ bddMap = {}; }
+  populateDatalists();
+
+  await refreshStats();
+  await refreshRecent();
+}
+
+function populateDatalists(){
+  collectionList.innerHTML = Object.keys(bddMap).map(c => `<option value="${escapeHtml(c)}">`).join('');
+  updateSerieOptions();
+}
+function updateSerieOptions(){
+  const coll = collectionInput.value.trim();
+  const series = bddMap[coll] || Object.values(bddMap).flat();
+  const uniq = [...new Set(series)];
+  serieList.innerHTML = uniq.map(s => `<option value="${escapeHtml(s)}">`).join('');
+}
+collectionInput.addEventListener('input', updateSerieOptions);
+
+async function refreshStats(){
+  const snap = await getDocs(collection(db, 'stock'));
+  let total = 0;
+  snap.forEach(d => { total += Number(d.data().quantite) || 0; });
+  statTotal.textContent = total;
+  statTotal.classList.add('bump');
+  setTimeout(()=>statTotal.classList.remove('bump'), 250);
+}
+
+async function refreshRecent(){
+  const q = query(collection(db, 'stock'), orderBy('createdAt', 'desc'), limit(20));
+  let snap;
+  try{
+    snap = await getDocs(q);
+  }catch(e){
+    // Si createdAt manque sur d'anciens docs importés sans index, on retombe sur une lecture simple
+    snap = await getDocs(collection(db, 'stock'));
+  }
+  const docs = [];
+  snap.forEach(d => docs.push(d.data()));
+  if(!docs.length){
+    slotList.innerHTML = '<div class="slot-empty">Aucune carte pour le moment.</div>';
+    return;
+  }
+  slotList.innerHTML = docs.map(renderSlot).join('');
+}
+
+function renderSlot(card){
+  const colors = ['var(--ember)','var(--holo1)','var(--holo2)','var(--grass)'];
+  const color = colors[hashStr(card.collection || '') % colors.length];
+  return `
+    <div class="slot" style="border-left-color:${color}">
+      <div class="name">${escapeHtml(card.carte)}${card.quantite>1 ? ' ×'+card.quantite : ''}</div>
+      <div class="meta">${escapeHtml(card.collection)} · ${escapeHtml(card.serie)} · N° ${escapeHtml(card.numCarte || '—')} · ${card.langue} · ${card.version}</div>
+    </div>`;
+}
+
+cardForm.addEventListener('submit', async e => {
+  e.preventDefault();
+  errMsg.textContent = '';
+
+  const collectionVal = collectionInput.value.trim();
+  const serie = serieInput.value.trim();
+  const numCarte = document.getElementById('numCarte').value.trim();
+  const nomCarte = document.getElementById('nomCarte').value.trim();
+  const langue = document.getElementById('langue').value;
+  const version = document.getElementById('version').value;
+  const quantite = Number(document.getElementById('quantite').value) || 1;
+
+  if(!collectionVal || !serie || !nomCarte){
+    errMsg.textContent = "Merci de renseigner au moins la Collection, la Série et le nom de la carte.";
+    return;
+  }
+
+  submitBtn.disabled = true;
+  try{
+    await addDoc(collection(db, 'stock'), {
+      collection: collectionVal, serie, numCarte: numCarte || '', carte: nomCarte,
+      langue, version, quantite, createdAt: serverTimestamp()
+    });
+  }catch(err){
+    errMsg.textContent = "Erreur lors de l'ajout : " + err.message;
+    submitBtn.disabled = false;
+    return;
+  }
+  submitBtn.disabled = false;
+
+  okMsg.classList.add('show');
+  setTimeout(()=>okMsg.classList.remove('show'), 1400);
+
+  document.getElementById('nomCarte').value = "";
+  document.getElementById('numCarte').value = "";
+  document.getElementById('quantite').value = 1;
+  document.getElementById('nomCarte').focus();
+
+  await refreshStats();
+  await refreshRecent();
+});
+
+importBtn.addEventListener('click', async () => {
+  if(!confirm("Importer les cartes de stock_seed.json vers la base en ligne ? À ne faire qu'une seule fois pour éviter les doublons.")) return;
+  importBtn.disabled = true;
+  importBtn.textContent = "Import en cours…";
+  try{
+    const res = await fetch(SEED_URL);
+    const rows = await res.json();
+    const batchSize = 400; // limite Firestore : 500 opérations par batch
+    for(let i=0; i<rows.length; i+=batchSize){
+      const batch = writeBatch(db);
+      rows.slice(i, i+batchSize).forEach(row => {
+        const ref = doc(collection(db, 'stock'));
+        batch.set(ref, { ...row, createdAt: serverTimestamp() });
+      });
+      await batch.commit();
+    }
+    importBtn.textContent = "Import terminé ✓";
+    await refreshStats();
+    await refreshRecent();
+  }catch(err){
+    errMsg.textContent = "Erreur pendant l'import : " + err.message;
+    importBtn.disabled = false;
+    importBtn.textContent = "Importer mon stock existant";
+  }
+});
+
+init();
+</script>
+</body>
+</html>

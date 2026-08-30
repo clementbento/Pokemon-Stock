@@ -165,6 +165,38 @@
   .row-del-btn:hover{color:var(--poke-red); background:rgba(227,53,13,.12);}
   .row-del-btn:disabled{opacity:.25; cursor:not-allowed;}
   .add-row-btn{margin-bottom:18px;}
+  .toolbar-row{display:flex; align-items:center; gap:10px; margin-bottom:18px; flex-wrap:wrap;}
+  .toolbar-row .add-row-btn{margin-bottom:0;}
+
+  /* ── SAUVEGARDE / CHARGEMENT DE LISTES ────────────────────── */
+  .modal-overlay{
+    display:none; position:fixed; inset:0; background:rgba(10,11,18,.72);
+    z-index:50; align-items:center; justify-content:center; padding:20px;
+  }
+  .modal-overlay.show{display:flex;}
+  .modal-box{
+    background:var(--panel); border:2px solid var(--poke-yellow); border-radius:16px;
+    padding:24px; max-width:400px; width:100%; box-shadow:0 10px 0 rgba(0,0,0,.25);
+  }
+  .modal-box.modal-box-wide{max-width:520px;}
+  .modal-box h3{
+    font-family:'Baloo 2',sans-serif; font-size:18px; margin:0 0 16px; color:var(--paper);
+    display:flex; align-items:center; gap:8px;
+  }
+  .modal-actions{display:flex; gap:10px; margin-top:18px; justify-content:flex-end;}
+  .saved-list-item{
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding:10px 12px; border:1px solid var(--border); border-radius:10px;
+    margin-bottom:8px; background:var(--panel-alt);
+  }
+  .saved-list-info{min-width:0;}
+  .saved-list-name{
+    font-family:'Baloo 2',sans-serif; font-weight:700; font-size:14px; color:var(--paper);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .saved-list-meta{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted); margin-top:2px;}
+  .saved-list-actions{display:flex; align-items:center; gap:4px; flex-shrink:0;}
+  .saved-lists-empty{padding:20px; text-align:center; color:var(--muted); font-family:'IBM Plex Mono',monospace; font-size:13px;}
 
   /* ── VUE "VÉRIFIER CARTES" ────────────────────────────────── */
   .check-hint{font-size:12px; color:var(--muted); line-height:1.6; margin:0 0 18px; max-width:640px;}
@@ -286,7 +318,10 @@
 
           <div id="rowsContainer"></div>
 
-          <button type="button" class="btn btn-ghost add-row-btn" id="addRowBtn">+ Ajouter une ligne</button>
+          <div class="toolbar-row">
+            <button type="button" class="btn btn-ghost add-row-btn" id="addRowBtn">+ Ajouter une ligne</button>
+            <button type="button" class="btn btn-ghost add-row-btn" id="loadListBtn">📂 Retrouver liste</button>
+          </div>
 
           <div class="submit-row">
             <button type="submit" class="btn btn-primary" id="submitBtn">+ Enregistrer la carte</button>
@@ -337,6 +372,16 @@
               <tbody id="checkBody"></tbody>
             </table>
           </div>
+
+          <div class="saveListBlock" style="margin-top:18px; padding-top:16px; border-top:1px solid var(--border); display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap;">
+            <div class="field" style="max-width:280px; margin-bottom:0; flex:1; min-width:200px;">
+              <label for="saveListName">Nom de la liste</label>
+              <input type="text" id="saveListName" placeholder="Ex : Commande Vinted du 30/08">
+            </div>
+            <button type="button" class="btn btn-primary" id="saveListBtn">💾 Sauvegarder cette liste</button>
+            <span class="ok-msg" id="saveListOkMsg"></span>
+          </div>
+          <div class="err-msg" id="saveListErrMsg"></div>
         </div>
       </div>
     </div>
@@ -382,6 +427,19 @@
 
   </div>
 
+</div>
+
+<!-- MODALE : listes sauvegardées -->
+<div class="modal-overlay" id="listsModal">
+  <div class="modal-box modal-box-wide">
+    <h3>📂 Listes sauvegardées</h3>
+    <div id="savedListsBody">
+      <div class="saved-lists-empty">Chargement…</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="listsModalCloseBtn">Fermer</button>
+    </div>
+  </div>
 </div>
 
 <script type="module">
@@ -476,6 +534,7 @@ const collectionList = document.getElementById('collectionList');
 const serieList = document.getElementById('serieList');
 const rowsContainer = document.getElementById('rowsContainer');
 const addRowBtn = document.getElementById('addRowBtn');
+const loadListBtn = document.getElementById('loadListBtn');
 
 const tabAdd = document.getElementById('tabAdd');
 const tabCheck = document.getElementById('tabCheck');
@@ -492,6 +551,13 @@ const checkErrMsg = document.getElementById('checkErrMsg');
 const checkResults = document.getElementById('checkResults');
 const checkSummary = document.getElementById('checkSummary');
 const checkBody = document.getElementById('checkBody');
+const saveListName = document.getElementById('saveListName');
+const saveListBtn = document.getElementById('saveListBtn');
+const saveListOkMsg = document.getElementById('saveListOkMsg');
+const saveListErrMsg = document.getElementById('saveListErrMsg');
+const listsModal = document.getElementById('listsModal');
+const savedListsBody = document.getElementById('savedListsBody');
+const listsModalCloseBtn = document.getElementById('listsModalCloseBtn');
 const stockSearch = document.getElementById('stockSearch');
 const stockBody = document.getElementById('stockBody');
 const stockCount = document.getElementById('stockCount');
@@ -594,6 +660,12 @@ if(firebaseConfig.apiKey.includes("TON-API-KEY") || firebaseConfig.apiKey.includ
   }
 
   // ── Gestion des lignes du formulaire d'ajout ──────────────
+  const LANGUE_OPTIONS = ['FR','EN','JP','US','IT','DE','ES'];
+  const VERSION_OPTIONS = ['Standard','Reverse','Holo','Full Art','Secrète','Promo'];
+  function selectOptionsHtml(values, selected){
+    return values.map(v => `<option value="${v}" ${v === selected ? 'selected' : ''}>${v}</option>`).join('');
+  }
+
   function rowTemplate(id, prefill = {}){
     return `
     <div class="card-row" data-row-id="${id}">
@@ -614,40 +686,25 @@ if(firebaseConfig.apiKey.includes("TON-API-KEY") || firebaseConfig.apiKey.includ
       <div class="row2">
         <div class="field">
           <label>N° carte</label>
-          <input type="text" class="f-num" placeholder="Ex : 43">
+          <input type="text" class="f-num" placeholder="Ex : 43" value="${escapeHtml(prefill.numCarte || '')}">
         </div>
         <div class="field">
           <label>Nom de la carte</label>
-          <input type="text" class="f-nom" placeholder="Ex : Sidérella" required>
+          <input type="text" class="f-nom" placeholder="Ex : Sidérella" value="${escapeHtml(prefill.carte || '')}" required>
         </div>
       </div>
       <div class="row3">
         <div class="field">
           <label>Langue</label>
-          <select class="f-langue">
-            <option value="FR" selected>FR</option>
-            <option value="EN">EN</option>
-            <option value="JP">JP</option>
-            <option value="US">US</option>
-            <option value="IT">IT</option>
-            <option value="DE">DE</option>
-            <option value="ES">ES</option>
-          </select>
+          <select class="f-langue">${selectOptionsHtml(LANGUE_OPTIONS, prefill.langue || 'FR')}</select>
         </div>
         <div class="field">
           <label>Version</label>
-          <select class="f-version">
-            <option value="Standard" selected>Standard</option>
-            <option value="Reverse">Reverse</option>
-            <option value="Holo">Holo</option>
-            <option value="Full Art">Full Art</option>
-            <option value="Secrète">Secrète</option>
-            <option value="Promo">Promo</option>
-          </select>
+          <select class="f-version">${selectOptionsHtml(VERSION_OPTIONS, prefill.version || 'Standard')}</select>
         </div>
         <div class="field">
           <label>Qté</label>
-          <input type="number" class="f-qte" value="1" min="1" required>
+          <input type="number" class="f-qte" value="${Number(prefill.quantite) || 1}" min="1" required>
         </div>
       </div>
     </div>`;
@@ -874,9 +931,14 @@ if(firebaseConfig.apiKey.includes("TON-API-KEY") || firebaseConfig.apiKey.includ
   });
 
   // ── Vérification (lecture seule, rien n'est enregistré) ────
+  let lastCheckedRows = [];
+
   checkForm.addEventListener('submit', e => {
     e.preventDefault();
     checkErrMsg.textContent = '';
+    saveListErrMsg.textContent = '';
+    saveListOkMsg.classList.remove('show');
+    saveListName.value = '';
 
     const rows = checkManager.collectRows();
     const invalidIndex = rows.findIndex(r => !r.collection || !r.serie || !r.carte);
@@ -917,8 +979,113 @@ if(firebaseConfig.apiKey.includes("TON-API-KEY") || firebaseConfig.apiKey.includ
       </tr>
     `).join('');
 
+    lastCheckedRows = rows;
     checkResults.style.display = 'block';
   });
+
+  // ── Sauvegarde de la liste vérifiée ─────────────────────────
+  saveListBtn.addEventListener('click', async () => {
+    saveListErrMsg.textContent = '';
+    const name = saveListName.value.trim();
+    if(!name){
+      saveListErrMsg.textContent = "Donne un nom à ta liste avant de la sauvegarder.";
+      return;
+    }
+    if(!lastCheckedRows.length){
+      saveListErrMsg.textContent = "Aucune liste vérifiée à sauvegarder.";
+      return;
+    }
+    saveListBtn.disabled = true;
+    try{
+      await addDoc(collection(db, 'savedLists'), {
+        name,
+        cards: lastCheckedRows,
+        createdAt: serverTimestamp()
+      });
+      saveListOkMsg.textContent = 'Liste sauvegardée ✓';
+      saveListOkMsg.classList.add('show');
+      setTimeout(()=>saveListOkMsg.classList.remove('show'), 2400);
+      saveListName.value = '';
+    }catch(err){
+      saveListErrMsg.textContent = "Erreur lors de la sauvegarde : " + err.message;
+    }
+    saveListBtn.disabled = false;
+  });
+
+  // ── Chargement d'une liste sauvegardée dans le formulaire d'ajout ──
+  function formatListDate(createdAt){
+    if(!createdAt || !createdAt.toDate) return '';
+    return createdAt.toDate().toLocaleDateString('fr-FR');
+  }
+
+  async function openListsModal(){
+    listsModal.classList.add('show');
+    savedListsBody.innerHTML = '<div class="saved-lists-empty">Chargement…</div>';
+    try{
+      const snap = await getDocs(query(collection(db, 'savedLists'), orderBy('createdAt', 'desc')));
+      const lists = [];
+      snap.forEach(d => lists.push({ id: d.id, ...d.data() }));
+      renderSavedLists(lists);
+    }catch(err){
+      savedListsBody.innerHTML = `<div class="saved-lists-empty">Erreur de chargement : ${escapeHtml(err.message)}</div>`;
+    }
+  }
+
+  function closeListsModal(){
+    listsModal.classList.remove('show');
+  }
+
+  function renderSavedLists(lists){
+    if(!lists.length){
+      savedListsBody.innerHTML = '<div class="saved-lists-empty">Aucune liste sauvegardée pour l\'instant.</div>';
+      return;
+    }
+    savedListsBody.innerHTML = lists.map(l => `
+      <div class="saved-list-item" data-id="${l.id}">
+        <div class="saved-list-info">
+          <div class="saved-list-name">${escapeHtml(l.name || 'Sans nom')}</div>
+          <div class="saved-list-meta">${(l.cards || []).length} carte(s)${formatListDate(l.createdAt) ? ' · ' + formatListDate(l.createdAt) : ''}</div>
+        </div>
+        <div class="saved-list-actions">
+          <button type="button" class="btn btn-ghost load-list-btn" data-id="${l.id}">Charger</button>
+          <button type="button" class="del-btn del-list-btn" data-id="${l.id}" title="Supprimer">✕</button>
+        </div>
+      </div>
+    `).join('');
+
+    savedListsBody.querySelectorAll('.load-list-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const list = lists.find(l => l.id === btn.dataset.id);
+        if(!list) return;
+        const cards = list.cards || [];
+        rowsContainer.innerHTML = '';
+        if(cards.length){
+          cards.forEach(c => addManager.addRow(c));
+        } else {
+          addManager.addRow();
+        }
+        closeListsModal();
+      });
+    });
+
+    savedListsBody.querySelectorAll('.del-list-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if(!confirm('Supprimer cette liste sauvegardée ?')) return;
+        btn.disabled = true;
+        try{
+          await deleteDoc(doc(db, 'savedLists', btn.dataset.id));
+          openListsModal();
+        }catch(err){
+          alert("Erreur lors de la suppression : " + err.message);
+          btn.disabled = false;
+        }
+      });
+    });
+  }
+
+  loadListBtn.addEventListener('click', openListsModal);
+  listsModalCloseBtn.addEventListener('click', closeListsModal);
+  listsModal.addEventListener('click', e => { if(e.target === listsModal) closeListsModal(); });
 
   importBtn.addEventListener('click', async () => {
     if(!confirm("Importer les cartes de stock_seed.json vers la base en ligne ? À ne faire qu'une seule fois pour éviter les doublons.")) return;

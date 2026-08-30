@@ -132,10 +132,11 @@
     </div>
   </header>
 
-  <!-- SETUP STATE : affiché si la config Firebase n'est pas renseignée -->
+  <!-- SETUP STATE : affiché si firebase-config.js est manquant ou mal renseigné -->
   <div class="setup" id="setupBox" style="display:none;">
     <h2>Configuration requise</h2>
-    <p>Ouvre <code>index.html</code> dans un éditeur de texte et remplace l'objet <code>firebaseConfig</code> tout en haut du script par celui de ton projet Firebase (Project Settings → tes applications → objet de configuration SDK). Recharge ensuite la page.</p>
+    <p>Copie le fichier <code>firebase-config.example.js</code> en <code>firebase-config.js</code> (dans le même dossier que <code>index.html</code>) et renseigne-le avec les identifiants de ton projet Firebase (Project Settings → tes applications → objet de configuration SDK). Recharge ensuite la page.</p>
+    <p><code>firebase-config.js</code> ne doit jamais être publié sur un dépôt Git public : il est déjà listé dans <code>.gitignore</code>.</p>
   </div>
 
   <!-- APP STATE -->
@@ -227,16 +228,11 @@
 
 <script type="module">
 // ─── CONFIGURATION ──────────────────────────────────────────────
-// Remplace cet objet par celui de ton projet Firebase
-// (Project Settings → Your apps → SDK setup and configuration)
-const firebaseConfig = {
-  apiKey: "AIzaSyAF-swuqm4XFf2nzlBmTcJKCbPrmlII3zk",
-  authDomain: "pokemon-stock-49d81.firebaseapp.com",
-  projectId: "pokemon-stock-49d81",
-  storageBucket: "pokemon-stock-49d81.firebasestorage.app",
-  messagingSenderId: "6621564022",
-  appId: "1:6621564022:web:1bc9a57e393d8924eca357"
-};
+// La config Firebase (clé API, projectId, etc.) vit désormais dans un
+// fichier séparé : firebase-config.js (ignoré par Git, voir .gitignore).
+// Cela évite d'avoir des identifiants en clair dans ce fichier si tu
+// publies ce code (repo public, partage, etc.).
+// Voir firebase-config.example.js pour le modèle à copier/remplir.
 // ─────────────────────────────────────────────────────────────────
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
@@ -275,10 +271,18 @@ function hashStr(s){
 }
 
 async function init(){
-  if(firebaseConfig.apiKey.includes("YOUR-API-KEY")){
+  let firebaseConfig;
+  try{
+    ({ firebaseConfig } = await import('./firebase-config.js'));
+  }catch(e){
     setupBox.style.display = 'block';
     return;
   }
+  if(!firebaseConfig || !firebaseConfig.apiKey || firebaseConfig.apiKey.includes("TON-API-KEY")){
+    setupBox.style.display = 'block';
+    return;
+  }
+
   const fbApp = initializeApp(firebaseConfig);
   db = getFirestore(fbApp);
   app.classList.add('active');

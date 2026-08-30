@@ -69,10 +69,15 @@
   .statchip .n.bump{transform:scale(1.18);}
   .statchip .l{font-size:10px;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;}
 
+  .headerRight{display:flex; align-items:center; gap:12px;}
+
   .setup{border:2px dashed var(--border); border-radius:16px; padding:32px 24px; background:var(--panel);}
   .setup h2{font-family:'Space Grotesk',sans-serif; font-size:18px; margin:0 0 10px;}
   .setup p{color:var(--muted); font-size:14px; line-height:1.6;}
   .setup code{background:var(--panel-alt); padding:2px 6px; border-radius:4px; font-family:'IBM Plex Mono',monospace; font-size:12.5px;}
+
+  .login-box{max-width:360px; margin:60px auto; background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:28px;}
+  .login-box h2{font-family:'Space Grotesk',sans-serif; font-size:18px; margin:0 0 18px;}
 
   .app{display:none;}
   .app.active{display:block;}
@@ -86,7 +91,7 @@
   label{display:block; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin:0 0 6px; font-family:'IBM Plex Mono',monospace;}
   .field{margin-bottom:16px;}
   .row2{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
-  input[type=text], input[type=number], select{
+  input[type=text], input[type=number], input[type=email], input[type=password], select{
     width:100%; background:var(--panel-alt); border:1px solid var(--border); color:var(--text);
     font-family:'Inter',sans-serif; font-size:14px; padding:10px 12px; border-radius:8px; outline:none;
     transition:border-color .15s ease;
@@ -126,17 +131,36 @@
       <p class="eyebrow"><span class="live-dot"></span>Connecté à ta base en ligne</p>
       <h1>Mon Classeur Pokémon</h1>
     </div>
-    <div class="statchip">
-      <span class="n" id="statTotal">–</span>
-      <span class="l">cartes en stock</span>
+    <div class="headerRight">
+      <div class="statchip">
+        <span class="n" id="statTotal">–</span>
+        <span class="l">cartes en stock</span>
+      </div>
+      <button class="btn btn-ghost" id="logoutBtn" style="display:none;">Se déconnecter</button>
     </div>
   </header>
 
-  <!-- SETUP STATE : affiché si firebase-config.js est manquant ou mal renseigné -->
+  <!-- SETUP STATE : affiché si la config Firebase n'est pas renseignée -->
   <div class="setup" id="setupBox" style="display:none;">
     <h2>Configuration requise</h2>
-    <p>Copie le fichier <code>firebase-config.example.js</code> en <code>firebase-config.js</code> (dans le même dossier que <code>index.html</code>) et renseigne-le avec les identifiants de ton projet Firebase (Project Settings → tes applications → objet de configuration SDK). Recharge ensuite la page.</p>
-    <p><code>firebase-config.js</code> ne doit jamais être publié sur un dépôt Git public : il est déjà listé dans <code>.gitignore</code>.</p>
+    <p>Ouvre <code>index.html</code> et remplace l'objet <code>firebaseConfig</code> tout en haut du script par celui de ton projet Firebase (Project Settings → tes applications → objet de configuration SDK). Recharge ensuite la page.</p>
+  </div>
+
+  <!-- LOGIN STATE -->
+  <div class="login-box" id="loginBox" style="display:none;">
+    <h2>Connexion</h2>
+    <div class="field">
+      <label for="loginEmail">Email</label>
+      <input type="email" id="loginEmail" placeholder="toi@exemple.com">
+    </div>
+    <div class="field">
+      <label for="loginPassword">Mot de passe</label>
+      <input type="password" id="loginPassword">
+    </div>
+    <div class="submit-row">
+      <button class="btn btn-primary" id="loginBtn">Se connecter</button>
+    </div>
+    <div class="err-msg" id="loginErr"></div>
   </div>
 
   <!-- APP STATE -->
@@ -228,14 +252,25 @@
 
 <script type="module">
 // ─── CONFIGURATION ──────────────────────────────────────────────
-// La config Firebase (clé API, projectId, etc.) vit désormais dans un
-// fichier séparé : firebase-config.js (ignoré par Git, voir .gitignore).
-// Cela évite d'avoir des identifiants en clair dans ce fichier si tu
-// publies ce code (repo public, partage, etc.).
-// Voir firebase-config.example.js pour le modèle à copier/remplir.
+// Remplace cet objet par celui de ton projet Firebase
+// (Project Settings → Your apps → SDK setup and configuration).
+// Cette valeur est visible publiquement dans le code (normal pour du
+// Firebase côté client) : la protection réelle vient de la connexion
+// ci-dessous + des règles Firestore, pas du fait de cacher cette clé.
+const firebaseConfig = {
+  apiKey: "AIzaSyAF-swuqm4XFf2nzlBmTcJKCbPrmlII3zk",
+  authDomain: "pokemon-stock-49d81.firebaseapp.com",
+  projectId: "pokemon-stock-49d81",
+  storageBucket: "pokemon-stock-49d81.firebasestorage.app",
+  messagingSenderId: "6621564022",
+  appId: "1:6621564022:web:1bc9a57e393d8924eca357"
+};
 // ─────────────────────────────────────────────────────────────────
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
+import {
+  getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js";
 import {
   getFirestore, collection, addDoc, getDocs, query, orderBy, limit,
   writeBatch, doc, serverTimestamp
@@ -249,7 +284,11 @@ let bddMap = {};
 
 const statTotal = document.getElementById('statTotal');
 const setupBox = document.getElementById('setupBox');
+const loginBox = document.getElementById('loginBox');
 const app = document.getElementById('app');
+const logoutBtn = document.getElementById('logoutBtn');
+const loginBtn = document.getElementById('loginBtn');
+const loginErr = document.getElementById('loginErr');
 const cardForm = document.getElementById('cardForm');
 const slotList = document.getElementById('slotList');
 const okMsg = document.getElementById('okMsg');
@@ -270,151 +309,171 @@ function hashStr(s){
   return Math.abs(h);
 }
 
-async function init(){
-  let firebaseConfig;
-  try{
-    ({ firebaseConfig } = await import('./firebase-config.js'));
-  }catch(e){
-    setupBox.style.display = 'block';
-    return;
-  }
-  if(!firebaseConfig || !firebaseConfig.apiKey || firebaseConfig.apiKey.includes("TON-API-KEY")){
-    setupBox.style.display = 'block';
-    return;
-  }
-
+if(firebaseConfig.apiKey.includes("TON-API-KEY") || firebaseConfig.apiKey.includes("YOUR-API-KEY")){
+  setupBox.style.display = 'block';
+} else {
   const fbApp = initializeApp(firebaseConfig);
+  const auth = getAuth(fbApp);
   db = getFirestore(fbApp);
-  app.classList.add('active');
 
-  try{
-    const res = await fetch(BDD_MAP_URL);
-    bddMap = await res.json();
-  }catch(e){ bddMap = {}; }
-  populateDatalists();
-
-  await refreshStats();
-  await refreshRecent();
-}
-
-function populateDatalists(){
-  collectionList.innerHTML = Object.keys(bddMap).map(c => `<option value="${escapeHtml(c)}">`).join('');
-  updateSerieOptions();
-}
-function updateSerieOptions(){
-  const coll = collectionInput.value.trim();
-  const series = bddMap[coll] || Object.values(bddMap).flat();
-  const uniq = [...new Set(series)];
-  serieList.innerHTML = uniq.map(s => `<option value="${escapeHtml(s)}">`).join('');
-}
-collectionInput.addEventListener('input', updateSerieOptions);
-
-async function refreshStats(){
-  const snap = await getDocs(collection(db, 'stock'));
-  let total = 0;
-  snap.forEach(d => { total += Number(d.data().quantite) || 0; });
-  statTotal.textContent = total;
-  statTotal.classList.add('bump');
-  setTimeout(()=>statTotal.classList.remove('bump'), 250);
-}
-
-async function refreshRecent(){
-  const q = query(collection(db, 'stock'), orderBy('createdAt', 'desc'), limit(20));
-  let snap;
-  try{
-    snap = await getDocs(q);
-  }catch(e){
-    // Si createdAt manque sur d'anciens docs importés sans index, on retombe sur une lecture simple
-    snap = await getDocs(collection(db, 'stock'));
-  }
-  const docs = [];
-  snap.forEach(d => docs.push(d.data()));
-  if(!docs.length){
-    slotList.innerHTML = '<div class="slot-empty">Aucune carte pour le moment.</div>';
-    return;
-  }
-  slotList.innerHTML = docs.map(renderSlot).join('');
-}
-
-function renderSlot(card){
-  const colors = ['var(--ember)','var(--holo1)','var(--holo2)','var(--grass)'];
-  const color = colors[hashStr(card.collection || '') % colors.length];
-  return `
-    <div class="slot" style="border-left-color:${color}">
-      <div class="name">${escapeHtml(card.carte)}${card.quantite>1 ? ' ×'+card.quantite : ''}</div>
-      <div class="meta">${escapeHtml(card.collection)} · ${escapeHtml(card.serie)} · N° ${escapeHtml(card.numCarte || '—')} · ${card.langue} · ${card.version}</div>
-    </div>`;
-}
-
-cardForm.addEventListener('submit', async e => {
-  e.preventDefault();
-  errMsg.textContent = '';
-
-  const collectionVal = collectionInput.value.trim();
-  const serie = serieInput.value.trim();
-  const numCarte = document.getElementById('numCarte').value.trim();
-  const nomCarte = document.getElementById('nomCarte').value.trim();
-  const langue = document.getElementById('langue').value;
-  const version = document.getElementById('version').value;
-  const quantite = Number(document.getElementById('quantite').value) || 1;
-
-  if(!collectionVal || !serie || !nomCarte){
-    errMsg.textContent = "Merci de renseigner au moins la Collection, la Série et le nom de la carte.";
-    return;
-  }
-
-  submitBtn.disabled = true;
-  try{
-    await addDoc(collection(db, 'stock'), {
-      collection: collectionVal, serie, numCarte: numCarte || '', carte: nomCarte,
-      langue, version, quantite, createdAt: serverTimestamp()
-    });
-  }catch(err){
-    errMsg.textContent = "Erreur lors de l'ajout : " + err.message;
-    submitBtn.disabled = false;
-    return;
-  }
-  submitBtn.disabled = false;
-
-  okMsg.classList.add('show');
-  setTimeout(()=>okMsg.classList.remove('show'), 1400);
-
-  document.getElementById('nomCarte').value = "";
-  document.getElementById('numCarte').value = "";
-  document.getElementById('quantite').value = 1;
-  document.getElementById('nomCarte').focus();
-
-  await refreshStats();
-  await refreshRecent();
-});
-
-importBtn.addEventListener('click', async () => {
-  if(!confirm("Importer les cartes de stock_seed.json vers la base en ligne ? À ne faire qu'une seule fois pour éviter les doublons.")) return;
-  importBtn.disabled = true;
-  importBtn.textContent = "Import en cours…";
-  try{
-    const res = await fetch(SEED_URL);
-    const rows = await res.json();
-    const batchSize = 400; // limite Firestore : 500 opérations par batch
-    for(let i=0; i<rows.length; i+=batchSize){
-      const batch = writeBatch(db);
-      rows.slice(i, i+batchSize).forEach(row => {
-        const ref = doc(collection(db, 'stock'));
-        batch.set(ref, { ...row, createdAt: serverTimestamp() });
-      });
-      await batch.commit();
+  onAuthStateChanged(auth, async (user) => {
+    if(user){
+      loginBox.style.display = 'none';
+      logoutBtn.style.display = 'inline-block';
+      app.classList.add('active');
+      await loadData();
+    } else {
+      loginBox.style.display = 'block';
+      logoutBtn.style.display = 'none';
+      app.classList.remove('active');
     }
-    importBtn.textContent = "Import terminé ✓";
+  });
+
+  loginBtn.addEventListener('click', async () => {
+    loginErr.textContent = '';
+    const email = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    if(!email || !password){
+      loginErr.textContent = "Renseigne ton email et ton mot de passe.";
+      return;
+    }
+    loginBtn.disabled = true;
+    try{
+      await signInWithEmailAndPassword(auth, email, password);
+    }catch(err){
+      loginErr.textContent = "Connexion impossible : " + err.message;
+    }
+    loginBtn.disabled = false;
+  });
+
+  logoutBtn.addEventListener('click', () => signOut(auth));
+
+  async function loadData(){
+    try{
+      const res = await fetch(BDD_MAP_URL);
+      bddMap = await res.json();
+    }catch(e){ bddMap = {}; }
+    populateDatalists();
     await refreshStats();
     await refreshRecent();
-  }catch(err){
-    errMsg.textContent = "Erreur pendant l'import : " + err.message;
-    importBtn.disabled = false;
-    importBtn.textContent = "Importer mon stock existant";
   }
-});
 
-init();
+  function populateDatalists(){
+    collectionList.innerHTML = Object.keys(bddMap).map(c => `<option value="${escapeHtml(c)}">`).join('');
+    updateSerieOptions();
+  }
+  function updateSerieOptions(){
+    const coll = collectionInput.value.trim();
+    const series = bddMap[coll] || Object.values(bddMap).flat();
+    const uniq = [...new Set(series)];
+    serieList.innerHTML = uniq.map(s => `<option value="${escapeHtml(s)}">`).join('');
+  }
+  collectionInput.addEventListener('input', updateSerieOptions);
+
+  async function refreshStats(){
+    const snap = await getDocs(collection(db, 'stock'));
+    let total = 0;
+    snap.forEach(d => { total += Number(d.data().quantite) || 0; });
+    statTotal.textContent = total;
+    statTotal.classList.add('bump');
+    setTimeout(()=>statTotal.classList.remove('bump'), 250);
+  }
+
+  async function refreshRecent(){
+    const q = query(collection(db, 'stock'), orderBy('createdAt', 'desc'), limit(20));
+    let snap;
+    try{
+      snap = await getDocs(q);
+    }catch(e){
+      snap = await getDocs(collection(db, 'stock'));
+    }
+    const docs = [];
+    snap.forEach(d => docs.push(d.data()));
+    if(!docs.length){
+      slotList.innerHTML = '<div class="slot-empty">Aucune carte pour le moment.</div>';
+      return;
+    }
+    slotList.innerHTML = docs.map(renderSlot).join('');
+  }
+
+  function renderSlot(card){
+    const colors = ['var(--ember)','var(--holo1)','var(--holo2)','var(--grass)'];
+    const color = colors[hashStr(card.collection || '') % colors.length];
+    return `
+      <div class="slot" style="border-left-color:${color}">
+        <div class="name">${escapeHtml(card.carte)}${card.quantite>1 ? ' ×'+card.quantite : ''}</div>
+        <div class="meta">${escapeHtml(card.collection)} · ${escapeHtml(card.serie)} · N° ${escapeHtml(card.numCarte || '—')} · ${card.langue} · ${card.version}</div>
+      </div>`;
+  }
+
+  cardForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    errMsg.textContent = '';
+
+    const collectionVal = collectionInput.value.trim();
+    const serie = serieInput.value.trim();
+    const numCarte = document.getElementById('numCarte').value.trim();
+    const nomCarte = document.getElementById('nomCarte').value.trim();
+    const langue = document.getElementById('langue').value;
+    const version = document.getElementById('version').value;
+    const quantite = Number(document.getElementById('quantite').value) || 1;
+
+    if(!collectionVal || !serie || !nomCarte){
+      errMsg.textContent = "Merci de renseigner au moins la Collection, la Série et le nom de la carte.";
+      return;
+    }
+
+    submitBtn.disabled = true;
+    try{
+      await addDoc(collection(db, 'stock'), {
+        collection: collectionVal, serie, numCarte: numCarte || '', carte: nomCarte,
+        langue, version, quantite, createdAt: serverTimestamp()
+      });
+    }catch(err){
+      errMsg.textContent = "Erreur lors de l'ajout : " + err.message;
+      submitBtn.disabled = false;
+      return;
+    }
+    submitBtn.disabled = false;
+
+    okMsg.classList.add('show');
+    setTimeout(()=>okMsg.classList.remove('show'), 1400);
+
+    document.getElementById('nomCarte').value = "";
+    document.getElementById('numCarte').value = "";
+    document.getElementById('quantite').value = 1;
+    document.getElementById('nomCarte').focus();
+
+    await refreshStats();
+    await refreshRecent();
+  });
+
+  importBtn.addEventListener('click', async () => {
+    if(!confirm("Importer les cartes de stock_seed.json vers la base en ligne ? À ne faire qu'une seule fois pour éviter les doublons.")) return;
+    importBtn.disabled = true;
+    importBtn.textContent = "Import en cours…";
+    try{
+      const res = await fetch(SEED_URL);
+      const rows = await res.json();
+      const batchSize = 400;
+      for(let i=0; i<rows.length; i+=batchSize){
+        const batch = writeBatch(db);
+        rows.slice(i, i+batchSize).forEach(row => {
+          const ref = doc(collection(db, 'stock'));
+          batch.set(ref, { ...row, createdAt: serverTimestamp() });
+        });
+        await batch.commit();
+      }
+      importBtn.textContent = "Import terminé ✓";
+      await refreshStats();
+      await refreshRecent();
+    }catch(err){
+      errMsg.textContent = "Erreur pendant l'import : " + err.message;
+      importBtn.disabled = false;
+      importBtn.textContent = "Importer mon stock existant";
+    }
+  });
+}
 </script>
 </body>
 </html>

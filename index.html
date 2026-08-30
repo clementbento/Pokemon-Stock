@@ -179,6 +179,26 @@
     font-family:'IBM Plex Mono',monospace; font-weight:700; padding:10px; border-top:2px solid var(--poke-yellow-dim);
     background:var(--panel-alt); color:var(--paper);
   }
+
+  /* ── MODALE "carte déjà présente" ─────────────────────────── */
+  .modal-overlay{
+    display:none; position:fixed; inset:0; background:rgba(10,11,18,.72);
+    z-index:50; align-items:center; justify-content:center; padding:20px;
+  }
+  .modal-overlay.show{display:flex;}
+  .modal-box{
+    background:var(--panel); border:2px solid var(--poke-yellow); border-radius:16px;
+    padding:24px; max-width:400px; width:100%; box-shadow:0 10px 0 rgba(0,0,0,.25);
+  }
+  .modal-box h3{
+    font-family:'Baloo 2',sans-serif; font-size:18px; margin:0 0 10px; color:var(--paper);
+    display:flex; align-items:center; gap:8px;
+  }
+  .modal-box p{color:var(--muted); font-size:13.5px; line-height:1.6; margin:0 0 6px;}
+  .modal-box .existing-qty{
+    font-family:'IBM Plex Mono',monospace; color:var(--poke-yellow); font-weight:700;
+  }
+  .modal-actions{display:flex; gap:10px; margin-top:18px; justify-content:flex-end;}
 </style>
 </head>
 <body>
@@ -356,6 +376,19 @@
 
 </div>
 
+<!-- MODALE : carte déjà présente dans le stock -->
+<div class="modal-overlay" id="dupeModal">
+  <div class="modal-box">
+    <h3>⚠️ Carte déjà présente</h3>
+    <p>Cette carte existe déjà dans ton stock avec une quantité de <span class="existing-qty" id="dupeQty">0</span>.</p>
+    <p>Veux-tu quand même l'ajouter comme nouvelle ligne ?</p>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="dupeCancelBtn">Annuler</button>
+      <button class="btn btn-primary" id="dupeConfirmBtn">Ajouter quand même</button>
+    </div>
+  </div>
+</div>
+
 <script type="module">
 // ─── CONFIGURATION ──────────────────────────────────────────────
 const firebaseConfig = {
@@ -385,6 +418,7 @@ let bddMap = {};
 let allCards = []; // { id, collection, serie, numCarte, carte, langue, version, quantite }
 let sortKey = 'collection';
 let sortDir = 1;
+let pendingCardData = null; // stocke la carte en attente de confirmation depuis la modale de doublon
 
 const statTotal = document.getElementById('statTotal');
 const setupBox = document.getElementById('setupBox');
@@ -412,6 +446,11 @@ const stockBody = document.getElementById('stockBody');
 const stockCount = document.getElementById('stockCount');
 const stockFooterTotal = document.getElementById('stockFooterTotal');
 
+const dupeModal = document.getElementById('dupeModal');
+const dupeQty = document.getElementById('dupeQty');
+const dupeCancelBtn = document.getElementById('dupeCancelBtn');
+const dupeConfirmBtn = document.getElementById('dupeConfirmBtn');
+
 function escapeHtml(str){
   return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
@@ -419,6 +458,32 @@ function hashStr(s){
   let h=0;
   for(let i=0;i<s.length;i++) h = (h*31 + s.charCodeAt(i)) | 0;
   return Math.abs(h);
+}
+
+function norm(v){
+  return String(v || '').trim().toLowerCase();
+}
+
+// Cherche une carte identique déjà en stock (même collection/série/n°/nom/langue/version)
+function findDuplicate(cardData){
+  return allCards.find(c =>
+    norm(c.collection) === norm(cardData.collection) &&
+    norm(c.serie) === norm(cardData.serie) &&
+    norm(c.numCarte) === norm(cardData.numCarte) &&
+    norm(c.carte) === norm(cardData.carte) &&
+    norm(c.langue) === norm(cardData.langue) &&
+    norm(c.version) === norm(cardData.version)
+  );
+}
+
+function openDupeModal(existingCard){
+  dupeQty.textContent = Number(existingCard.quantite) || 0;
+  dupeModal.classList.add('show');
+}
+function closeDupeModal(){
+  dupeModal.classList.remove('show');
+  pendingCardData = null;
+  submitBtn.disabled = false;
 }
 
 // ── Navigation entre les deux pages ──────────────────────────
@@ -574,28 +639,13 @@ if(firebaseConfig.apiKey.includes("TON-API-KEY") || firebaseConfig.apiKey.includ
     });
   });
 
-  cardForm.addEventListener('submit', async e => {
-    e.preventDefault();
-    errMsg.textContent = '';
-
-    const collectionVal = collectionInput.value.trim();
-    const serie = serieInput.value.trim();
-    const numCarte = document.getElementById('numCarte').value.trim();
-    const nomCarte = document.getElementById('nomCarte').value.trim();
-    const langue = document.getElementById('langue').value;
-    const version = document.getElementById('version').value;
-    const quantite = Number(document.getElementById('quantite').value) || 1;
-
-    if(!collectionVal || !serie || !nomCarte){
-      errMsg.textContent = "Merci de renseigner au moins la Collection, la Série et le nom de la carte.";
-      return;
-    }
-
+  // Enregistre réellement la carte en base (appelé directement, ou après confirmation de doublon)
+  async function saveCard(cardData){
     submitBtn.disabled = true;
     try{
       await addDoc(collection(db, 'stock'), {
-        collection: collectionVal, serie, numCarte: numCarte || '', carte: nomCarte,
-        langue, version, quantite, createdAt: serverTimestamp()
+        ...cardData,
+        createdAt: serverTimestamp()
       });
     }catch(err){
       errMsg.textContent = "Erreur lors de l'ajout : " + err.message;
@@ -613,6 +663,52 @@ if(firebaseConfig.apiKey.includes("TON-API-KEY") || firebaseConfig.apiKey.includ
     document.getElementById('nomCarte').focus();
 
     await refreshAll();
+  }
+
+  cardForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    errMsg.textContent = '';
+
+    const collectionVal = collectionInput.value.trim();
+    const serie = serieInput.value.trim();
+    const numCarte = document.getElementById('numCarte').value.trim();
+    const nomCarte = document.getElementById('nomCarte').value.trim();
+    const langue = document.getElementById('langue').value;
+    const version = document.getElementById('version').value;
+    const quantite = Number(document.getElementById('quantite').value) || 1;
+
+    if(!collectionVal || !serie || !nomCarte){
+      errMsg.textContent = "Merci de renseigner au moins la Collection, la Série et le nom de la carte.";
+      return;
+    }
+
+    const cardData = {
+      collection: collectionVal, serie, numCarte: numCarte || '', carte: nomCarte,
+      langue, version, quantite
+    };
+
+    const doublon = findDuplicate(cardData);
+    if(doublon){
+      pendingCardData = cardData;
+      submitBtn.disabled = true;
+      openDupeModal(doublon);
+      return;
+    }
+
+    await saveCard(cardData);
+  });
+
+  dupeCancelBtn.addEventListener('click', () => {
+    closeDupeModal();
+  });
+
+  dupeConfirmBtn.addEventListener('click', async () => {
+    const cardData = pendingCardData;
+    dupeModal.classList.remove('show');
+    pendingCardData = null;
+    if(cardData){
+      await saveCard(cardData);
+    }
   });
 
   importBtn.addEventListener('click', async () => {

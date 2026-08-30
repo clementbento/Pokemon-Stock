@@ -125,6 +125,7 @@
   label{display:block; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin:0 0 6px; font-family:'IBM Plex Mono',monospace;}
   .field{margin-bottom:16px;}
   .row2{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
+  .row3{display:grid; grid-template-columns:1fr 1fr 100px; gap:14px;}
   input[type=text], input[type=number], input[type=email], input[type=password], input[type=search], select{
     width:100%; background:var(--panel-alt); border:1px solid var(--border); color:var(--text);
     font-family:'Inter',sans-serif; font-size:14px; padding:10px 12px; border-radius:9px; outline:none;
@@ -146,6 +147,24 @@
   .ok-msg{font-size:13px; color:var(--grass); font-family:'IBM Plex Mono',monospace; opacity:0; transition:opacity .3s ease;}
   .ok-msg.show{opacity:1;}
   .err-msg{font-size:13px; color:#f2b9a0; font-family:'IBM Plex Mono',monospace; margin-top:8px;}
+
+  /* ── LIGNES DE CARTE (ajout multiple) ─────────────────────── */
+  .card-row{
+    border:1px solid var(--border); border-radius:12px; padding:14px 16px 2px;
+    margin-bottom:14px; background:var(--panel-alt); position:relative;
+  }
+  .card-row-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;}
+  .card-row-num{
+    font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.08em;
+    color:var(--poke-yellow); text-transform:uppercase;
+  }
+  .row-del-btn{
+    background:transparent; border:none; color:var(--muted); cursor:pointer; font-size:15px;
+    padding:2px 8px; border-radius:6px; line-height:1;
+  }
+  .row-del-btn:hover{color:var(--poke-red); background:rgba(227,53,13,.12);}
+  .row-del-btn:disabled{opacity:.25; cursor:not-allowed;}
+  .add-row-btn{margin-bottom:18px;}
 
   /* ── VUE "MON STOCK" façon tableur ────────────────────────── */
   .stock-toolbar{display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap;}
@@ -179,26 +198,6 @@
     font-family:'IBM Plex Mono',monospace; font-weight:700; padding:10px; border-top:2px solid var(--poke-yellow-dim);
     background:var(--panel-alt); color:var(--paper);
   }
-
-  /* ── MODALE "carte déjà présente" ─────────────────────────── */
-  .modal-overlay{
-    display:none; position:fixed; inset:0; background:rgba(10,11,18,.72);
-    z-index:50; align-items:center; justify-content:center; padding:20px;
-  }
-  .modal-overlay.show{display:flex;}
-  .modal-box{
-    background:var(--panel); border:2px solid var(--poke-yellow); border-radius:16px;
-    padding:24px; max-width:400px; width:100%; box-shadow:0 10px 0 rgba(0,0,0,.25);
-  }
-  .modal-box h3{
-    font-family:'Baloo 2',sans-serif; font-size:18px; margin:0 0 10px; color:var(--paper);
-    display:flex; align-items:center; gap:8px;
-  }
-  .modal-box p{color:var(--muted); font-size:13.5px; line-height:1.6; margin:0 0 6px;}
-  .modal-box .existing-qty{
-    font-family:'IBM Plex Mono',monospace; color:var(--poke-yellow); font-weight:700;
-  }
-  .modal-actions{display:flex; gap:10px; margin-top:18px; justify-content:flex-end;}
 </style>
 </head>
 <body>
@@ -255,73 +254,26 @@
   <div class="app" id="app">
 
     <nav class="tabs">
-      <button class="tab-btn active" id="tabAdd" data-view="view-add">+ Ajouter une carte</button>
+      <button class="tab-btn active" id="tabAdd" data-view="view-add">+ Ajouter des cartes</button>
       <button class="tab-btn" id="tabStock" data-view="view-stock">📋 Mon stock</button>
     </nav>
 
-    <!-- VUE : AJOUTER UNE CARTE -->
+    <!-- VUE : AJOUTER DES CARTES -->
     <div class="view active" id="view-add">
       <div class="panel">
-        <h2><span class="dot"></span>Ajouter une carte</h2>
+        <h2><span class="dot"></span>Ajouter des cartes</h2>
         <form id="cardForm">
-          <div class="row2">
-            <div class="field">
-              <label for="collection">Collection</label>
-              <input type="text" id="collection" list="collectionList" placeholder="Ex : Ecarlate et Violet" required>
-              <datalist id="collectionList"></datalist>
-            </div>
-            <div class="field">
-              <label for="serie">Série</label>
-              <input type="text" id="serie" list="serieList" placeholder="Ex : Flamme Blanche" required>
-              <datalist id="serieList"></datalist>
-            </div>
-          </div>
 
-          <div class="row2">
-            <div class="field">
-              <label for="numCarte">N° carte</label>
-              <input type="text" id="numCarte" placeholder="Ex : 43">
-            </div>
-            <div class="field">
-              <label for="nomCarte">Nom de la carte</label>
-              <input type="text" id="nomCarte" placeholder="Ex : Sidérella" required>
-            </div>
-          </div>
+          <datalist id="collectionList"></datalist>
+          <datalist id="serieList"></datalist>
 
-          <div class="row2">
-            <div class="field">
-              <label for="langue">Langue</label>
-              <select id="langue">
-                <option value="FR" selected>FR</option>
-                <option value="EN">EN</option>
-                <option value="JP">JP</option>
-                <option value="US">US</option>
-                <option value="IT">IT</option>
-                <option value="DE">DE</option>
-                <option value="ES">ES</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="version">Version</label>
-              <select id="version">
-                <option value="Standard" selected>Standard</option>
-                <option value="Reverse">Reverse</option>
-                <option value="Holo">Holo</option>
-                <option value="Full Art">Full Art</option>
-                <option value="Secrète">Secrète</option>
-                <option value="Promo">Promo</option>
-              </select>
-            </div>
-          </div>
+          <div id="rowsContainer"></div>
 
-          <div class="field" style="max-width:140px;">
-            <label for="quantite">Quantité</label>
-            <input type="number" id="quantite" value="1" min="1" required>
-          </div>
+          <button type="button" class="btn btn-ghost add-row-btn" id="addRowBtn">+ Ajouter une ligne</button>
 
           <div class="submit-row">
-            <button type="submit" class="btn btn-primary" id="submitBtn">+ Ajouter au classeur</button>
-            <span class="ok-msg" id="okMsg">Carte ajoutée ✓</span>
+            <button type="submit" class="btn btn-primary" id="submitBtn">+ Enregistrer la carte</button>
+            <span class="ok-msg" id="okMsg"></span>
           </div>
           <div class="err-msg" id="errMsg"></div>
         </form>
@@ -374,19 +326,6 @@
 
   </div>
 
-</div>
-
-<!-- MODALE : carte déjà présente dans le stock -->
-<div class="modal-overlay" id="dupeModal">
-  <div class="modal-box">
-    <h3>⚠️ Carte déjà présente</h3>
-    <p>Cette carte existe déjà dans ton stock avec une quantité de <span class="existing-qty" id="dupeQty">0</span>.</p>
-    <p>Veux-tu ajouter la quantité saisie à cette carte existante ?</p>
-    <div class="modal-actions">
-      <button class="btn btn-ghost" id="dupeCancelBtn">Annuler</button>
-      <button class="btn btn-primary" id="dupeConfirmBtn">Ajouter la quantité</button>
-    </div>
-  </div>
 </div>
 
 <script type="module">
@@ -463,8 +402,7 @@ let bddMap = {};
 let allCards = []; // { id, collection, serie, numCarte, carte, langue, version, quantite }
 let sortKey = 'collection';
 let sortDir = 1;
-let pendingCardData = null; // stocke la carte en attente de confirmation depuis la modale de doublon
-let pendingExistingCard = null; // stocke la carte déjà en stock correspondant au doublon
+let rowIdCounter = 0;
 
 const statTotal = document.getElementById('statTotal');
 const setupBox = document.getElementById('setupBox');
@@ -478,10 +416,10 @@ const okMsg = document.getElementById('okMsg');
 const errMsg = document.getElementById('errMsg');
 const submitBtn = document.getElementById('submitBtn');
 const importBtn = document.getElementById('importBtn');
-const collectionInput = document.getElementById('collection');
-const serieInput = document.getElementById('serie');
 const collectionList = document.getElementById('collectionList');
 const serieList = document.getElementById('serieList');
+const rowsContainer = document.getElementById('rowsContainer');
+const addRowBtn = document.getElementById('addRowBtn');
 
 const tabAdd = document.getElementById('tabAdd');
 const tabStock = document.getElementById('tabStock');
@@ -492,45 +430,27 @@ const stockBody = document.getElementById('stockBody');
 const stockCount = document.getElementById('stockCount');
 const stockFooterTotal = document.getElementById('stockFooterTotal');
 
-const dupeModal = document.getElementById('dupeModal');
-const dupeQty = document.getElementById('dupeQty');
-const dupeCancelBtn = document.getElementById('dupeCancelBtn');
-const dupeConfirmBtn = document.getElementById('dupeConfirmBtn');
-
 function escapeHtml(str){
   return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
-function hashStr(s){
-  let h=0;
-  for(let i=0;i<s.length;i++) h = (h*31 + s.charCodeAt(i)) | 0;
-  return Math.abs(h);
 }
 
 function norm(v){
   return String(v || '').trim().toLowerCase();
 }
 
-// Cherche une carte identique déjà en stock (même collection/série/n°/nom/langue/version)
-function findDuplicate(cardData){
-  return allCards.find(c =>
-    norm(c.collection) === norm(cardData.collection) &&
-    norm(c.serie) === norm(cardData.serie) &&
-    norm(c.numCarte) === norm(cardData.numCarte) &&
-    norm(c.carte) === norm(cardData.carte) &&
-    norm(c.langue) === norm(cardData.langue) &&
-    norm(c.version) === norm(cardData.version)
-  );
+// Compare deux fiches carte (mêmes collection/série/n°/nom/langue/version)
+function sameCard(a, b){
+  return norm(a.collection) === norm(b.collection) &&
+         norm(a.serie) === norm(b.serie) &&
+         norm(a.numCarte) === norm(b.numCarte) &&
+         norm(a.carte) === norm(b.carte) &&
+         norm(a.langue) === norm(b.langue) &&
+         norm(a.version) === norm(b.version);
 }
 
-function openDupeModal(existingCard){
-  dupeQty.textContent = Number(existingCard.quantite) || 0;
-  dupeModal.classList.add('show');
-}
-function closeDupeModal(){
-  dupeModal.classList.remove('show');
-  pendingCardData = null;
-  pendingExistingCard = null;
-  submitBtn.disabled = false;
+// Cherche une carte identique déjà en stock
+function findDuplicateInStock(cardData){
+  return allCards.find(c => sameCard(c, cardData));
 }
 
 // ── Navigation entre les deux pages ──────────────────────────
@@ -588,24 +508,126 @@ if(firebaseConfig.apiKey.includes("TON-API-KEY") || firebaseConfig.apiKey.includ
       bddMap = await res.json();
     }catch(e){ bddMap = {}; }
     populateDatalists();
+    if(!rowsContainer.querySelector('.card-row')) addRow();
     await refreshAll();
   }
 
   function populateDatalists(){
-    // Fusionne la liste de référence connue avec celles éventuellement présentes dans bdd_map.json
     const collections = [...new Set([...KNOWN_COLLECTIONS, ...Object.keys(bddMap)])];
     collectionList.innerHTML = collections.map(c => `<option value="${escapeHtml(c)}">`).join('');
-    updateSerieOptions();
+    const series = [...new Set([...KNOWN_SERIES, ...Object.values(bddMap).flat()])];
+    serieList.innerHTML = series.map(s => `<option value="${escapeHtml(s)}">`).join('');
   }
-  function updateSerieOptions(){
-    const coll = collectionInput.value.trim();
-    // Séries propres à la collection tapée si connues dans bdd_map.json, sinon liste complète de référence
-    const fromMap = bddMap[coll];
-    const series = fromMap && fromMap.length ? fromMap : [...KNOWN_SERIES, ...Object.values(bddMap).flat()];
-    const uniq = [...new Set(series)];
-    serieList.innerHTML = uniq.map(s => `<option value="${escapeHtml(s)}">`).join('');
+
+  // ── Gestion des lignes du formulaire d'ajout ──────────────
+  function rowTemplate(id, prefill = {}){
+    return `
+    <div class="card-row" data-row-id="${id}">
+      <div class="card-row-head">
+        <span class="card-row-num"></span>
+        <button type="button" class="row-del-btn" title="Supprimer cette ligne">✕</button>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>Collection</label>
+          <input type="text" class="f-collection" list="collectionList" placeholder="Ex : Ecarlate et Violet" value="${escapeHtml(prefill.collection || '')}" required>
+        </div>
+        <div class="field">
+          <label>Série</label>
+          <input type="text" class="f-serie" list="serieList" placeholder="Ex : Flamme Blanche" value="${escapeHtml(prefill.serie || '')}" required>
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>N° carte</label>
+          <input type="text" class="f-num" placeholder="Ex : 43">
+        </div>
+        <div class="field">
+          <label>Nom de la carte</label>
+          <input type="text" class="f-nom" placeholder="Ex : Sidérella" required>
+        </div>
+      </div>
+      <div class="row3">
+        <div class="field">
+          <label>Langue</label>
+          <select class="f-langue">
+            <option value="FR" selected>FR</option>
+            <option value="EN">EN</option>
+            <option value="JP">JP</option>
+            <option value="US">US</option>
+            <option value="IT">IT</option>
+            <option value="DE">DE</option>
+            <option value="ES">ES</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Version</label>
+          <select class="f-version">
+            <option value="Standard" selected>Standard</option>
+            <option value="Reverse">Reverse</option>
+            <option value="Holo">Holo</option>
+            <option value="Full Art">Full Art</option>
+            <option value="Secrète">Secrète</option>
+            <option value="Promo">Promo</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Qté</label>
+          <input type="number" class="f-qte" value="1" min="1" required>
+        </div>
+      </div>
+    </div>`;
   }
-  collectionInput.addEventListener('input', updateSerieOptions);
+
+  function addRow(prefill = {}){
+    rowIdCounter++;
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = rowTemplate(rowIdCounter, prefill).trim();
+    const rowEl = wrapper.firstChild;
+    rowsContainer.appendChild(rowEl);
+    rowEl.querySelector('.row-del-btn').addEventListener('click', () => removeRow(rowEl));
+    refreshRowChrome();
+    rowEl.querySelector('.f-collection').focus();
+  }
+
+  function removeRow(rowEl){
+    rowEl.remove();
+    if(!rowsContainer.querySelector('.card-row')) addRow();
+    refreshRowChrome();
+  }
+
+  function refreshRowChrome(){
+    const rows = rowsContainer.querySelectorAll('.card-row');
+    rows.forEach((row, i) => {
+      row.querySelector('.card-row-num').textContent = 'Carte ' + (i + 1);
+      row.querySelector('.row-del-btn').disabled = rows.length <= 1;
+    });
+    submitBtn.textContent = rows.length <= 1 ? '+ Enregistrer la carte' : `+ Enregistrer les ${rows.length} cartes`;
+  }
+
+  function getLastRowValues(){
+    const rows = rowsContainer.querySelectorAll('.card-row');
+    if(!rows.length) return {};
+    const last = rows[rows.length - 1];
+    return {
+      collection: last.querySelector('.f-collection').value.trim(),
+      serie: last.querySelector('.f-serie').value.trim()
+    };
+  }
+
+  function collectRowsData(){
+    return Array.from(rowsContainer.querySelectorAll('.card-row')).map(row => ({
+      collection: row.querySelector('.f-collection').value.trim(),
+      serie: row.querySelector('.f-serie').value.trim(),
+      numCarte: row.querySelector('.f-num').value.trim(),
+      carte: row.querySelector('.f-nom').value.trim(),
+      langue: row.querySelector('.f-langue').value,
+      version: row.querySelector('.f-version').value,
+      quantite: Number(row.querySelector('.f-qte').value) || 1
+    }));
+  }
+
+  addRowBtn.addEventListener('click', () => addRow(getLastRowValues()));
 
   // Recharge le total + le tableau complet depuis Firestore
   async function refreshAll(){
@@ -690,47 +712,45 @@ if(firebaseConfig.apiKey.includes("TON-API-KEY") || firebaseConfig.apiKey.includ
     });
   });
 
-  // Enregistre réellement la carte en base (crée une nouvelle ligne)
-  async function saveCard(cardData){
-    submitBtn.disabled = true;
-    try{
-      await addDoc(collection(db, 'stock'), {
-        ...cardData,
-        createdAt: serverTimestamp()
-      });
-    }catch(err){
-      errMsg.textContent = "Erreur lors de l'ajout : " + err.message;
-      submitBtn.disabled = false;
-      return;
-    }
-    submitBtn.disabled = false;
-    finishSubmit();
+  // Enregistre plusieurs cartes en une seule opération atomique.
+  // Les lignes identiques entre elles sont fusionnées, et toute carte déjà
+  // présente en stock voit simplement sa quantité incrémentée.
+  async function saveMultipleCards(rows){
+    const merged = [];
+    rows.forEach(r => {
+      const existing = merged.find(m => sameCard(m, r));
+      if(existing) existing.quantite += r.quantite;
+      else merged.push({ ...r });
+    });
+
+    const batch = writeBatch(db);
+    let newCount = 0, mergedCount = 0;
+    merged.forEach(cardData => {
+      const doublon = findDuplicateInStock(cardData);
+      if(doublon){
+        batch.update(doc(db, 'stock', doublon.id), { quantite: increment(cardData.quantite) });
+        mergedCount++;
+      } else {
+        batch.set(doc(collection(db, 'stock')), { ...cardData, createdAt: serverTimestamp() });
+        newCount++;
+      }
+    });
+    await batch.commit();
+    return { newCount, mergedCount };
   }
 
-  // Ajoute la quantité à une carte déjà existante au lieu de créer une nouvelle ligne
-  async function addQuantityToExisting(existingCard, addedQuantite){
-    submitBtn.disabled = true;
-    try{
-      await updateDoc(doc(db, 'stock', existingCard.id), {
-        quantite: increment(addedQuantite)
-      });
-    }catch(err){
-      errMsg.textContent = "Erreur lors de la mise à jour de la quantité : " + err.message;
-      submitBtn.disabled = false;
-      return;
-    }
-    submitBtn.disabled = false;
-    finishSubmit();
-  }
+  function finishSubmit(newCount, mergedCount, lastVals){
+    let msg;
+    if(newCount && mergedCount) msg = `${newCount} carte(s) ajoutée(s), ${mergedCount} fusionnée(s) avec le stock ✓`;
+    else if(mergedCount) msg = `${mergedCount} carte(s) fusionnée(s) avec le stock existant ✓`;
+    else msg = `${newCount} carte(s) ajoutée(s) ✓`;
 
-  function finishSubmit(){
+    okMsg.textContent = msg;
     okMsg.classList.add('show');
-    setTimeout(()=>okMsg.classList.remove('show'), 1400);
+    setTimeout(()=>okMsg.classList.remove('show'), 2400);
 
-    document.getElementById('nomCarte').value = "";
-    document.getElementById('numCarte').value = "";
-    document.getElementById('quantite').value = 1;
-    document.getElementById('nomCarte').focus();
+    rowsContainer.innerHTML = '';
+    addRow(lastVals);
 
     refreshAll();
   }
@@ -739,49 +759,22 @@ if(firebaseConfig.apiKey.includes("TON-API-KEY") || firebaseConfig.apiKey.includ
     e.preventDefault();
     errMsg.textContent = '';
 
-    const collectionVal = collectionInput.value.trim();
-    const serie = serieInput.value.trim();
-    const numCarte = document.getElementById('numCarte').value.trim();
-    const nomCarte = document.getElementById('nomCarte').value.trim();
-    const langue = document.getElementById('langue').value;
-    const version = document.getElementById('version').value;
-    const quantite = Number(document.getElementById('quantite').value) || 1;
-
-    if(!collectionVal || !serie || !nomCarte){
-      errMsg.textContent = "Merci de renseigner au moins la Collection, la Série et le nom de la carte.";
+    const rows = collectRowsData();
+    const invalidIndex = rows.findIndex(r => !r.collection || !r.serie || !r.carte);
+    if(invalidIndex !== -1){
+      errMsg.textContent = `Merci de renseigner au moins la Collection, la Série et le nom de la carte pour la carte n°${invalidIndex + 1}.`;
       return;
     }
 
-    const cardData = {
-      collection: collectionVal, serie, numCarte: numCarte || '', carte: nomCarte,
-      langue, version, quantite
-    };
-
-    const doublon = findDuplicate(cardData);
-    if(doublon){
-      pendingCardData = cardData;
-      pendingExistingCard = doublon;
-      submitBtn.disabled = true;
-      openDupeModal(doublon);
-      return;
+    submitBtn.disabled = true;
+    try{
+      const lastVals = getLastRowValues();
+      const { newCount, mergedCount } = await saveMultipleCards(rows);
+      finishSubmit(newCount, mergedCount, lastVals);
+    }catch(err){
+      errMsg.textContent = "Erreur lors de l'ajout : " + err.message;
     }
-
-    await saveCard(cardData);
-  });
-
-  dupeCancelBtn.addEventListener('click', () => {
-    closeDupeModal();
-  });
-
-  dupeConfirmBtn.addEventListener('click', async () => {
-    const cardData = pendingCardData;
-    const existingCard = pendingExistingCard;
-    dupeModal.classList.remove('show');
-    pendingCardData = null;
-    pendingExistingCard = null;
-    if(cardData && existingCard){
-      await addQuantityToExisting(existingCard, cardData.quantite);
-    }
+    submitBtn.disabled = false;
   });
 
   importBtn.addEventListener('click', async () => {

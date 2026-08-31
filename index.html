@@ -1,489 +1,533 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { ChevronLeft, ChevronRight, Check, RotateCcw, Loader2 } from "lucide-react";
+<div class="wrap">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Inter:wght@400;500;600&display=swap');
 
-const STORAGE_KEY = "lokhlass-owned-cards";
-const PAGE_SIZE = 9; // page 9 pochettes, comme un vrai classeur
+    * { box-sizing: border-box; }
 
-function naturalNumberKey(numberStr) {
-  const match = /^(\d+)/.exec(numberStr || "");
-  return match ? parseInt(match[1], 10) : 999999;
-}
+    .wrap {
+      --navy: #16283F;
+      --frost: #EAF6FB;
+      --pocket: #D3E9F2;
+      --teal: #1C8C93;
+      --amber: #E8A33D;
+      --ink: #1B2530;
+      font-family: 'Inter', sans-serif;
+      background: var(--frost);
+      min-height: 100%;
+      padding: 0 0 32px 0;
+      color: var(--ink);
+    }
 
-function sortCards(a, b) {
-  const dateA = a.set?.releaseDate || "9999/99/99";
-  const dateB = b.set?.releaseDate || "9999/99/99";
-  if (dateA !== dateB) return dateA < dateB ? -1 : 1;
-  const numA = naturalNumberKey(a.number);
-  const numB = naturalNumberKey(b.number);
-  if (numA !== numB) return numA - numB;
-  return (a.number || "").localeCompare(b.number || "");
-}
+    .spine {
+      background: var(--navy);
+      color: #EAF6FB;
+      padding: 22px 20px 26px;
+      border-radius: 0 0 18px 18px;
+      position: relative;
+      overflow: hidden;
+    }
 
-export default function MassetLokhlass() {
-  const [cards, setCards] = useState([]);
-  const [status, setStatus] = useState("loading"); // loading | error | ready
-  const [owned, setOwned] = useState(new Set());
-  const [page, setPage] = useState(0);
-  const [setFilter, setSetFilter] = useState("Toutes les extensions");
-  const [missingOnly, setMissingOnly] = useState(false);
-  const [storageReady, setStorageReady] = useState(false);
+    .spine::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(115deg, rgba(255,255,255,0.08) 0%, transparent 40%);
+      pointer-events: none;
+    }
 
-  const fetchCards = useCallback(async () => {
-    setStatus("loading");
+    .spine h1 {
+      font-family: 'Baloo 2', sans-serif;
+      font-weight: 800;
+      font-size: 26px;
+      margin: 0 0 4px 0;
+      letter-spacing: 0.2px;
+    }
+
+    .spine p {
+      margin: 0 0 16px 0;
+      font-size: 13.5px;
+      color: #AFCBDA;
+    }
+
+    .meter-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .meter-track {
+      flex: 1;
+      height: 10px;
+      border-radius: 6px;
+      background: rgba(255,255,255,0.14);
+      overflow: hidden;
+    }
+
+    .meter-fill {
+      height: 100%;
+      border-radius: 6px;
+      background: linear-gradient(90deg, #1C8C93, #7FDCE3);
+      transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+      width: 0%;
+    }
+
+    .meter-label {
+      font-family: 'Baloo 2', sans-serif;
+      font-weight: 700;
+      font-size: 15px;
+      white-space: nowrap;
+      min-width: 44px;
+      text-align: right;
+    }
+
+    .meter-count {
+      font-size: 12px;
+      color: #AFCBDA;
+      margin-top: 6px;
+    }
+
+    .controls {
+      display: flex;
+      gap: 8px;
+      padding: 16px 20px 4px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .controls select {
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid #BFDCE7;
+      background: white;
+      color: var(--ink);
+      flex: 1;
+      min-width: 160px;
+    }
+
+    .toggle-btn {
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 1px solid #BFDCE7;
+      background: white;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .toggle-btn.active {
+      background: var(--amber);
+      border-color: var(--amber);
+    }
+
+    .page-panel {
+      margin: 12px 20px 0;
+      background: #F6FBFD;
+      border-radius: 16px;
+      padding: 18px 14px 14px;
+      box-shadow: inset 0 0 0 1px #D6EAF1;
+      position: relative;
+    }
+
+    .holes {
+      position: absolute;
+      left: 6px;
+      top: 18px;
+      bottom: 18px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .holes span {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--frost);
+      box-shadow: inset 0 0 0 1px #BFDCE7;
+      display: block;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      padding-left: 14px;
+    }
+
+    .pocket {
+      aspect-ratio: 63 / 88;
+      background: var(--pocket);
+      border-radius: 8px;
+      position: relative;
+      cursor: pointer;
+      overflow: hidden;
+      border: 1.5px dashed #A9CEDC;
+      transition: transform 0.15s ease, border-color 0.15s ease;
+    }
+
+    .pocket:active {
+      transform: scale(0.96);
+    }
+
+    .pocket.owned {
+      border: 1.5px solid var(--teal);
+    }
+
+    .pocket img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+
+    .pocket:not(.owned) img {
+      filter: grayscale(1) opacity(0.55);
+    }
+
+    .badge {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--teal);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+      color: white;
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .empty-msg {
+      grid-column: 1 / -1;
+      text-align: center;
+      padding: 30px 0;
+      color: #5A7484;
+      font-size: 13px;
+    }
+
+    .pager {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 20px 0;
+    }
+
+    .pager button {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: var(--navy);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 9px 13px;
+      font-size: 13px;
+      font-family: 'Inter', sans-serif;
+      cursor: pointer;
+    }
+
+    .pager button:disabled {
+      opacity: 0.35;
+      cursor: default;
+    }
+
+    .pager .page-num {
+      font-size: 13px;
+      color: #5A7484;
+    }
+
+    .state-box {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 60px 20px;
+      color: #5A7484;
+      font-size: 14px;
+      text-align: center;
+    }
+
+    .retry-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--navy);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 9px 14px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .spin {
+      display: inline-block;
+      width: 22px;
+      height: 22px;
+      border: 3px solid #C7DEE8;
+      border-top-color: var(--navy);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .hidden { display: none !important; }
+  </style>
+
+  <div class="spine">
+    <h1>Masterset Lokhlass</h1>
+    <p>Toutes les cartes Lokhlass, toutes extensions confondues</p>
+    <div class="meter-row">
+      <div class="meter-track">
+        <div class="meter-fill" id="meterFill"></div>
+      </div>
+      <div class="meter-label" id="meterLabel">0%</div>
+    </div>
+    <div class="meter-count" id="meterCount">0 / … cartes obtenues</div>
+  </div>
+
+  <div class="state-box" id="loadingBox">
+    <div class="spin"></div>
+    Chargement des cartes Lokhlass…
+  </div>
+
+  <div class="state-box hidden" id="errorBox">
+    Impossible de charger les cartes pour le moment.
+    <button class="retry-btn" id="retryBtn">Réessayer</button>
+  </div>
+
+  <div id="appBody" class="hidden">
+    <div class="controls">
+      <select id="setFilter"></select>
+      <button class="toggle-btn" id="missingToggle">Manquantes seulement</button>
+    </div>
+
+    <div class="page-panel">
+      <div class="holes">
+        <span></span><span></span><span></span><span></span><span></span>
+      </div>
+      <div class="grid" id="grid"></div>
+    </div>
+
+    <div class="pager">
+      <button id="prevBtn">‹ Précédent</button>
+      <div class="page-num" id="pageNum">Page 1 / 1</div>
+      <button id="nextBtn">Suivant ›</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const STORAGE_KEY = "lokhlass-owned-cards";
+  const PAGE_SIZE = 9;
+
+  let cards = [];
+  let owned = new Set();
+  let page = 0;
+  let setFilter = "Toutes les extensions";
+  let missingOnly = false;
+
+  const loadingBox = document.getElementById("loadingBox");
+  const errorBox = document.getElementById("errorBox");
+  const appBody = document.getElementById("appBody");
+  const grid = document.getElementById("grid");
+  const setFilterEl = document.getElementById("setFilter");
+  const missingToggle = document.getElementById("missingToggle");
+  const prevBtn = document.getElementById("prevBtn");
+  const nextBtn = document.getElementById("nextBtn");
+  const pageNum = document.getElementById("pageNum");
+  const meterFill = document.getElementById("meterFill");
+  const meterLabel = document.getElementById("meterLabel");
+  const meterCount = document.getElementById("meterCount");
+  const retryBtn = document.getElementById("retryBtn");
+
+  function naturalNumberKey(numberStr) {
+    const match = /^(\d+)/.exec(numberStr || "");
+    return match ? parseInt(match[1], 10) : 999999;
+  }
+
+  function sortCards(a, b) {
+    const dateA = (a.set && a.set.releaseDate) || "9999/99/99";
+    const dateB = (b.set && b.set.releaseDate) || "9999/99/99";
+    if (dateA !== dateB) return dateA < dateB ? -1 : 1;
+    const numA = naturalNumberKey(a.number);
+    const numB = naturalNumberKey(b.number);
+    if (numA !== numB) return numA - numB;
+    return (a.number || "").localeCompare(b.number || "");
+  }
+
+  async function loadOwned() {
+    try {
+      const result = await window.storage.get(STORAGE_KEY, false);
+      if (result && result.value) {
+        owned = new Set(JSON.parse(result.value));
+      }
+    } catch (e) {
+      // rien de sauvegardé encore
+    }
+  }
+
+  async function persistOwned() {
+    try {
+      await window.storage.set(STORAGE_KEY, JSON.stringify(Array.from(owned)), false);
+    } catch (e) {
+      // échec silencieux
+    }
+  }
+
+  async function fetchCards() {
+    loadingBox.classList.remove("hidden");
+    errorBox.classList.add("hidden");
+    appBody.classList.add("hidden");
     try {
       let all = [];
-      let pageNum = 1;
+      let pageIndex = 1;
       let totalCount = Infinity;
       while (all.length < totalCount) {
-        const res = await fetch(
-          `https://api.pokemontcg.io/v2/cards?q=name:lapras&pageSize=250&page=${pageNum}`
-        );
+        const res = await fetch(`https://api.pokemontcg.io/v2/cards?q=name:lapras&pageSize=250&page=${pageIndex}`);
         if (!res.ok) throw new Error("Réponse API invalide");
         const data = await res.json();
         all = all.concat(data.data || []);
-        totalCount = data.totalCount ?? all.length;
+        totalCount = data.totalCount != null ? data.totalCount : all.length;
         if (!data.data || data.data.length === 0) break;
-        pageNum += 1;
+        pageIndex += 1;
       }
       all.sort(sortCards);
-      setCards(all);
-      setStatus("ready");
+      cards = all;
+      await loadOwned();
+      populateSetFilter();
+      render();
+      loadingBox.classList.add("hidden");
+      appBody.classList.remove("hidden");
     } catch (e) {
-      setStatus("error");
+      loadingBox.classList.add("hidden");
+      errorBox.classList.remove("hidden");
     }
-  }, []);
+  }
 
-  useEffect(() => {
-    fetchCards();
-  }, [fetchCards]);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const result = await window.storage.get(STORAGE_KEY, false);
-        if (result?.value) {
-          const ids = JSON.parse(result.value);
-          setOwned(new Set(ids));
-        }
-      } catch (e) {
-        // pas encore de données sauvegardées
-      } finally {
-        setStorageReady(true);
-      }
-    })();
-  }, []);
-
-  const persistOwned = useCallback(async (nextSet) => {
-    try {
-      await window.storage.set(STORAGE_KEY, JSON.stringify(Array.from(nextSet)), false);
-    } catch (e) {
-      // échec silencieux, on garde l'état local
-    }
-  }, []);
-
-  const toggleOwned = (id) => {
-    setOwned((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      persistOwned(next);
-      return next;
-    });
-  };
-
-  const setNames = useMemo(() => {
-    const seen = new Map();
+  function populateSetFilter() {
+    const seen = new Set();
+    const names = ["Toutes les extensions"];
     cards.forEach((c) => {
-      if (c.set?.name && !seen.has(c.set.name)) seen.set(c.set.name, c.set.releaseDate || "");
+      const name = c.set && c.set.name;
+      if (name && !seen.has(name)) {
+        seen.add(name);
+        names.push(name);
+      }
     });
-    const names = Array.from(seen.keys());
-    return ["Toutes les extensions", ...names];
-  }, [cards]);
+    setFilterEl.innerHTML = names.map((n) => `<option value="${n}">${n}</option>`).join("");
+    setFilterEl.value = setFilter;
+  }
 
-  const filteredCards = useMemo(() => {
+  function getFiltered() {
     return cards.filter((c) => {
-      if (setFilter !== "Toutes les extensions" && c.set?.name !== setFilter) return false;
+      if (setFilter !== "Toutes les extensions" && (!c.set || c.set.name !== setFilter)) return false;
       if (missingOnly && owned.has(c.id)) return false;
       return true;
     });
-  }, [cards, setFilter, missingOnly, owned]);
+  }
 
-  useEffect(() => {
-    setPage(0);
-  }, [setFilter, missingOnly]);
+  function render() {
+    const filtered = getFiltered();
+    const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    if (page >= totalPages) page = totalPages - 1;
+    if (page < 0) page = 0;
 
-  const totalPages = Math.max(1, Math.ceil(filteredCards.length / PAGE_SIZE));
-  const pageCards = filteredCards.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+    const pageCards = filtered.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
 
-  const ownedCount = cards.filter((c) => owned.has(c.id)).length;
-  const totalCount = cards.length;
-  const percent = totalCount > 0 ? Math.round((ownedCount / totalCount) * 100) : 0;
+    grid.innerHTML = "";
+    if (pageCards.length === 0) {
+      const msg = document.createElement("div");
+      msg.className = "empty-msg";
+      msg.textContent = "Aucune carte pour ce filtre.";
+      grid.appendChild(msg);
+    } else {
+      pageCards.forEach((card) => {
+        const isOwned = owned.has(card.id);
+        const pocket = document.createElement("div");
+        pocket.className = "pocket" + (isOwned ? " owned" : "");
+        pocket.title = `${card.name} · ${(card.set && card.set.name) || ""} · n°${card.number}`;
+        pocket.addEventListener("click", () => {
+          if (owned.has(card.id)) owned.delete(card.id);
+          else owned.add(card.id);
+          persistOwned();
+          render();
+          updateMeter();
+        });
 
-  return (
-    <div className="wrap">
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Inter:wght@400;500;600&display=swap');
-
-        * { box-sizing: border-box; }
-
-        .wrap {
-          --navy: #16283F;
-          --frost: #EAF6FB;
-          --pocket: #D3E9F2;
-          --teal: #1C8C93;
-          --amber: #E8A33D;
-          --ink: #1B2530;
-          font-family: 'Inter', sans-serif;
-          background: var(--frost);
-          min-height: 100%;
-          padding: 0 0 32px 0;
-          color: var(--ink);
+        if (card.images && card.images.small) {
+          const img = document.createElement("img");
+          img.src = card.images.small;
+          img.alt = card.name;
+          img.loading = "lazy";
+          pocket.appendChild(img);
         }
 
-        .spine {
-          background: var(--navy);
-          color: #EAF6FB;
-          padding: 22px 20px 26px;
-          border-radius: 0 0 18px 18px;
-          position: relative;
-          overflow: hidden;
+        if (isOwned) {
+          const badge = document.createElement("div");
+          badge.className = "badge";
+          badge.textContent = "✓";
+          pocket.appendChild(badge);
         }
 
-        .spine::after {
-          content: '';
-          position: absolute;
-          inset: 0;
-          background: linear-gradient(115deg, rgba(255,255,255,0.08) 0%, transparent 40%);
-          pointer-events: none;
-        }
+        grid.appendChild(pocket);
+      });
+    }
 
-        .spine h1 {
-          font-family: 'Baloo 2', sans-serif;
-          font-weight: 800;
-          font-size: 26px;
-          margin: 0 0 4px 0;
-          letter-spacing: 0.2px;
-        }
+    pageNum.textContent = `Page ${page + 1} / ${totalPages}`;
+    prevBtn.disabled = page === 0;
+    nextBtn.disabled = page >= totalPages - 1;
+  }
 
-        .spine p {
-          margin: 0 0 16px 0;
-          font-size: 13.5px;
-          color: #AFCBDA;
-        }
+  function updateMeter() {
+    const ownedCount = cards.filter((c) => owned.has(c.id)).length;
+    const totalCount = cards.length;
+    const percent = totalCount > 0 ? Math.round((ownedCount / totalCount) * 100) : 0;
+    meterFill.style.width = percent + "%";
+    meterLabel.textContent = percent + "%";
+    meterCount.textContent = `${ownedCount} / ${totalCount || "…"} cartes obtenues`;
+  }
 
-        .meter-row {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-        }
+  setFilterEl.addEventListener("change", (e) => {
+    setFilter = e.target.value;
+    page = 0;
+    render();
+  });
 
-        .meter-track {
-          flex: 1;
-          height: 10px;
-          border-radius: 6px;
-          background: rgba(255,255,255,0.14);
-          overflow: hidden;
-        }
+  missingToggle.addEventListener("click", () => {
+    missingOnly = !missingOnly;
+    missingToggle.classList.toggle("active", missingOnly);
+    missingToggle.textContent = missingOnly ? "Manquantes seulement ✓" : "Manquantes seulement";
+    page = 0;
+    render();
+  });
 
-        .meter-fill {
-          height: 100%;
-          border-radius: 6px;
-          background: linear-gradient(90deg, #1C8C93, #7FDCE3);
-          transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1);
-        }
+  prevBtn.addEventListener("click", () => {
+    page -= 1;
+    render();
+  });
 
-        .meter-label {
-          font-family: 'Baloo 2', sans-serif;
-          font-weight: 700;
-          font-size: 15px;
-          white-space: nowrap;
-          min-width: 44px;
-          text-align: right;
-        }
+  nextBtn.addEventListener("click", () => {
+    page += 1;
+    render();
+  });
 
-        .meter-count {
-          font-size: 12px;
-          color: #AFCBDA;
-          margin-top: 6px;
-        }
+  retryBtn.addEventListener("click", fetchCards);
 
-        .controls {
-          display: flex;
-          gap: 8px;
-          padding: 16px 20px 4px;
-          flex-wrap: wrap;
-          align-items: center;
-        }
-
-        .controls select {
-          font-family: 'Inter', sans-serif;
-          font-size: 13px;
-          padding: 8px 10px;
-          border-radius: 8px;
-          border: 1px solid #BFDCE7;
-          background: white;
-          color: var(--ink);
-          flex: 1;
-          min-width: 160px;
-        }
-
-        .toggle-btn {
-          font-family: 'Inter', sans-serif;
-          font-size: 13px;
-          font-weight: 500;
-          padding: 8px 12px;
-          border-radius: 8px;
-          border: 1px solid #BFDCE7;
-          background: white;
-          cursor: pointer;
-          white-space: nowrap;
-        }
-
-        .page-panel {
-          margin: 12px 20px 0;
-          background: #F6FBFD;
-          border-radius: 16px;
-          padding: 18px 14px 14px;
-          box-shadow: inset 0 0 0 1px #D6EAF1;
-          position: relative;
-        }
-
-        .holes {
-          position: absolute;
-          left: 6px;
-          top: 18px;
-          bottom: 18px;
-          display: flex;
-          flex-direction: column;
-          justify-content: space-between;
-        }
-
-        .holes span {
-          width: 8px;
-          height: 8px;
-          border-radius: 50%;
-          background: var(--frost);
-          box-shadow: inset 0 0 0 1px #BFDCE7;
-          display: block;
-        }
-
-        .grid {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 8px;
-          padding-left: 14px;
-        }
-
-        .pocket {
-          aspect-ratio: 63 / 88;
-          background: var(--pocket);
-          border-radius: 8px;
-          position: relative;
-          cursor: pointer;
-          overflow: hidden;
-          border: 1.5px dashed #A9CEDC;
-          transition: transform 0.15s ease, border-color 0.15s ease;
-        }
-
-        .pocket:active {
-          transform: scale(0.96);
-        }
-
-        .pocket.owned {
-          border: 1.5px solid var(--teal);
-        }
-
-        .pocket img {
-          width: 100%;
-          height: 100%;
-          object-fit: contain;
-          display: block;
-        }
-
-        .pocket:not(.owned) img {
-          filter: grayscale(1) opacity(0.55);
-        }
-
-        .badge {
-          position: absolute;
-          top: 4px;
-          right: 4px;
-          width: 20px;
-          height: 20px;
-          border-radius: 50%;
-          background: var(--teal);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          box-shadow: 0 1px 3px rgba(0,0,0,0.25);
-        }
-
-        .empty-pocket {
-          width: 100%;
-          height: 100%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-
-        .pager {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 14px 20px 0;
-        }
-
-        .pager button {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          background: var(--navy);
-          color: white;
-          border: none;
-          border-radius: 8px;
-          padding: 9px 13px;
-          font-size: 13px;
-          font-family: 'Inter', sans-serif;
-          cursor: pointer;
-        }
-
-        .pager button:disabled {
-          opacity: 0.35;
-          cursor: default;
-        }
-
-        .pager .page-num {
-          font-size: 13px;
-          color: #5A7484;
-        }
-
-        .state-box {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          gap: 10px;
-          padding: 60px 20px;
-          color: #5A7484;
-          font-size: 14px;
-          text-align: center;
-        }
-
-        .retry-btn {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          background: var(--navy);
-          color: white;
-          border: none;
-          border-radius: 8px;
-          padding: 9px 14px;
-          font-size: 13px;
-          cursor: pointer;
-        }
-
-        .spin {
-          animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
-
-      <div className="spine">
-        <h1>Masterset Lokhlass</h1>
-        <p>Toutes les cartes Lokhlass, toutes extensions confondues</p>
-        <div className="meter-row">
-          <div className="meter-track">
-            <div className="meter-fill" style={{ width: `${percent}%` }} />
-          </div>
-          <div className="meter-label">{percent}%</div>
-        </div>
-        <div className="meter-count">
-          {ownedCount} / {totalCount || "…"} cartes obtenues
-        </div>
-      </div>
-
-      {status === "loading" && (
-        <div className="state-box">
-          <Loader2 size={26} className="spin" />
-          Chargement des cartes Lokhlass…
-        </div>
-      )}
-
-      {status === "error" && (
-        <div className="state-box">
-          Impossible de charger les cartes pour le moment.
-          <button className="retry-btn" onClick={fetchCards}>
-            <RotateCcw size={14} /> Réessayer
-          </button>
-        </div>
-      )}
-
-      {status === "ready" && (
-        <>
-          <div className="controls">
-            <select value={setFilter} onChange={(e) => setSetFilter(e.target.value)}>
-              {setNames.map((name) => (
-                <option key={name} value={name}>{name}</option>
-              ))}
-            </select>
-            <button
-              className="toggle-btn"
-              style={{ background: missingOnly ? "#E8A33D" : "white" }}
-              onClick={() => setMissingOnly((v) => !v)}
-            >
-              {missingOnly ? "Manquantes seulement ✓" : "Manquantes seulement"}
-            </button>
-          </div>
-
-          <div className="page-panel">
-            <div className="holes">
-              <span /><span /><span /><span /><span />
-            </div>
-            <div className="grid">
-              {pageCards.map((card) => {
-                const isOwned = owned.has(card.id);
-                return (
-                  <div
-                    key={card.id}
-                    className={`pocket ${isOwned ? "owned" : ""}`}
-                    onClick={() => toggleOwned(card.id)}
-                    title={`${card.name} · ${card.set?.name || ""} · n°${card.number}`}
-                  >
-                    {card.images?.small ? (
-                      <img src={card.images.small} alt={card.name} loading="lazy" />
-                    ) : (
-                      <div className="empty-pocket">?</div>
-                    )}
-                    {isOwned && (
-                      <div className="badge">
-                        <Check size={12} color="white" strokeWidth={3} />
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-              {pageCards.length === 0 && (
-                <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "30px 0", color: "#5A7484", fontSize: 13 }}>
-                  Aucune carte pour ce filtre.
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="pager">
-            <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}>
-              <ChevronLeft size={15} /> Précédent
-            </button>
-            <div className="page-num">Page {page + 1} / {totalPages}</div>
-            <button onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}>
-              Suivant <ChevronRight size={15} />
-            </button>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
+  fetchCards().then(updateMeter);
+})();
+</script>

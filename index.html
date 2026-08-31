@@ -1,1117 +1,489 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Mon Classeur Pokémon</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
-<style>
-  :root{
-    --ink:#12141f;
-    --panel:#1b1f2e;
-    --panel-alt:#232838;
-    --paper:#fff6df;
-    --text:#f0ece0;
-    --muted:#8b93ab;
-    --border:#2e3448;
-    --poke-red:#e3350d;
-    --poke-red-dim:#a8280a;
-    --poke-blue:#2a75bb;
-    --poke-yellow:#ffcb05;
-    --poke-yellow-dim:#d9a900;
-    --grass:#4caf6d;
-    --water:#3b9de0;
-    --fire:#f2703c;
-    --psychic:#a875d1;
-    --row-alt:#1f2433;
-  }
-  *{box-sizing:border-box;}
-  html,body{margin:0;padding:0;}
-  body{
-    background:var(--ink);
-    color:var(--text);
-    font-family:'Inter',sans-serif;
-    min-height:100vh;
-    background-image:
-      radial-gradient(circle at 12% -5%, rgba(255,203,5,0.10), transparent 42%),
-      radial-gradient(circle at 90% 8%, rgba(42,117,187,0.12), transparent 45%),
-      radial-gradient(circle at 50% 100%, rgba(227,53,13,0.06), transparent 50%);
-  }
-  .wrap{max-width:1080px;margin:0 auto;padding:28px 20px 80px; position:relative;}
+import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { ChevronLeft, ChevronRight, Check, RotateCcw, Loader2 } from "lucide-react";
 
-  .pokeball-bg{
-    position:fixed; top:-90px; right:-90px; width:280px; height:280px; opacity:.06; pointer-events:none; z-index:0;
-  }
-  .pokeball-bg svg{width:100%;height:100%;}
+const STORAGE_KEY = "lokhlass-owned-cards";
+const PAGE_SIZE = 9; // page 9 pochettes, comme un vrai classeur
 
-  .eyebrow{
-    font-family:'IBM Plex Mono',monospace;
-    font-size:11px;
-    letter-spacing:.18em;
-    color:var(--poke-yellow);
-    text-transform:uppercase;
-    margin:0 0 6px;
-    display:flex;
-    align-items:center;
-    gap:8px;
-  }
-  .live-dot{width:8px;height:8px;border-radius:50%; background:var(--poke-red); border:2px solid var(--paper); box-shadow:0 0 0 rgba(227,53,13,.6); animation:pulse 2s infinite;}
-  @keyframes pulse{
-    0%{box-shadow:0 0 0 0 rgba(227,53,13,.5);}
-    70%{box-shadow:0 0 0 6px rgba(227,53,13,0);}
-    100%{box-shadow:0 0 0 0 rgba(227,53,13,0);}
-  }
-  header{
-    display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:14px;
-    padding-bottom:18px; margin-bottom:18px; position:relative; z-index:1;
-  }
-  header::after{
-    content:""; position:absolute; left:0;right:0;bottom:0; height:3px; border-radius:3px;
-    background:linear-gradient(90deg,var(--poke-red),var(--poke-yellow) 45%,var(--poke-blue) 85%, transparent);
-    opacity:.9;
-  }
-  h1{
-    font-family:'Baloo 2',sans-serif; font-weight:800; font-size:32px; margin:0; letter-spacing:-.01em;
-    color:var(--paper);
-    text-shadow: 2px 2px 0 var(--poke-red-dim);
-  }
-  .statchip{
-    font-family:'IBM Plex Mono',monospace; background:var(--panel); border:2px solid var(--poke-yellow);
-    border-radius:12px; padding:10px 16px; text-align:right; min-width:150px;
-    box-shadow: 0 2px 0 var(--poke-yellow-dim);
-  }
-  .statchip .n{display:block; font-size:22px; font-weight:700; color:var(--poke-yellow); transition:transform .25s ease; font-family:'Baloo 2',sans-serif;}
-  .statchip .n.bump{transform:scale(1.18);}
-  .statchip .l{font-size:10px;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;}
+function naturalNumberKey(numberStr) {
+  const match = /^(\d+)/.exec(numberStr || "");
+  return match ? parseInt(match[1], 10) : 999999;
+}
 
-  .headerRight{display:flex; align-items:center; gap:12px;}
+function sortCards(a, b) {
+  const dateA = a.set?.releaseDate || "9999/99/99";
+  const dateB = b.set?.releaseDate || "9999/99/99";
+  if (dateA !== dateB) return dateA < dateB ? -1 : 1;
+  const numA = naturalNumberKey(a.number);
+  const numB = naturalNumberKey(b.number);
+  if (numA !== numB) return numA - numB;
+  return (a.number || "").localeCompare(b.number || "");
+}
 
-  /* NAV */
-  .tabs{display:flex; gap:8px; margin-bottom:22px; position:relative; z-index:1;}
-  .tab-btn{
-    font-family:'Baloo 2',sans-serif; font-weight:700; font-size:14.5px; color:var(--muted);
-    background:var(--panel); border:2px solid var(--border); border-radius:10px; padding:10px 18px;
-    cursor:pointer; transition:all .15s ease;
-  }
-  .tab-btn:hover{color:var(--text); border-color:var(--poke-yellow-dim);}
-  .tab-btn.active{color:var(--ink); background:var(--poke-yellow); border-color:var(--poke-yellow); box-shadow:0 3px 0 var(--poke-yellow-dim);}
+export default function MassetLokhlass() {
+  const [cards, setCards] = useState([]);
+  const [status, setStatus] = useState("loading"); // loading | error | ready
+  const [owned, setOwned] = useState(new Set());
+  const [page, setPage] = useState(0);
+  const [setFilter, setSetFilter] = useState("Toutes les extensions");
+  const [missingOnly, setMissingOnly] = useState(false);
+  const [storageReady, setStorageReady] = useState(false);
 
-  .setup{border:2px dashed var(--border); border-radius:16px; padding:32px 24px; background:var(--panel);}
-  .setup h2{font-family:'Baloo 2',sans-serif; font-size:18px; margin:0 0 10px; color:var(--paper);}
-  .setup p{color:var(--muted); font-size:14px; line-height:1.6;}
-  .setup code{background:var(--panel-alt); padding:2px 6px; border-radius:4px; font-family:'IBM Plex Mono',monospace; font-size:12.5px;}
+  const fetchCards = useCallback(async () => {
+    setStatus("loading");
+    try {
+      let all = [];
+      let pageNum = 1;
+      let totalCount = Infinity;
+      while (all.length < totalCount) {
+        const res = await fetch(
+          `https://api.pokemontcg.io/v2/cards?q=name:lapras&pageSize=250&page=${pageNum}`
+        );
+        if (!res.ok) throw new Error("Réponse API invalide");
+        const data = await res.json();
+        all = all.concat(data.data || []);
+        totalCount = data.totalCount ?? all.length;
+        if (!data.data || data.data.length === 0) break;
+        pageNum += 1;
+      }
+      all.sort(sortCards);
+      setCards(all);
+      setStatus("ready");
+    } catch (e) {
+      setStatus("error");
+    }
+  }, []);
 
-  .login-box{max-width:360px; margin:60px auto; background:var(--panel); border:2px solid var(--poke-blue); border-radius:16px; padding:28px; position:relative; z-index:1;}
-  .login-box h2{font-family:'Baloo 2',sans-serif; font-size:20px; margin:0 0 18px; color:var(--paper);}
+  useEffect(() => {
+    fetchCards();
+  }, [fetchCards]);
 
-  .app{display:none; position:relative; z-index:1;}
-  .app.active{display:block;}
+  useEffect(() => {
+    (async () => {
+      try {
+        const result = await window.storage.get(STORAGE_KEY, false);
+        if (result?.value) {
+          const ids = JSON.parse(result.value);
+          setOwned(new Set(ids));
+        }
+      } catch (e) {
+        // pas encore de données sauvegardées
+      } finally {
+        setStorageReady(true);
+      }
+    })();
+  }, []);
 
-  .view{display:none;}
-  .view.active{display:block;}
+  const persistOwned = useCallback(async (nextSet) => {
+    try {
+      await window.storage.set(STORAGE_KEY, JSON.stringify(Array.from(nextSet)), false);
+    } catch (e) {
+      // échec silencieux, on garde l'état local
+    }
+  }, []);
 
-  .panel{
-    background:var(--panel); border:2px solid var(--border); border-radius:16px; padding:22px;
-    position:relative; overflow:hidden;
-  }
-  .panel::before{
-    content:""; position:absolute; top:0; left:0; right:0; height:4px;
-    background:linear-gradient(90deg,var(--poke-red),var(--poke-yellow),var(--poke-blue));
-  }
-  .panel h2{font-family:'Baloo 2',sans-serif; font-weight:700; font-size:17px; margin:0 0 18px; display:flex; align-items:center; gap:8px; color:var(--paper);}
-  .panel h2 .dot{width:9px;height:9px;border-radius:50%;background:var(--grass); display:inline-block; box-shadow:0 0 0 2px rgba(76,175,109,.25);}
+  const toggleOwned = (id) => {
+    setOwned((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      persistOwned(next);
+      return next;
+    });
+  };
 
-  label{display:block; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin:0 0 6px; font-family:'IBM Plex Mono',monospace;}
-  .field{margin-bottom:16px;}
-  .row2{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
-  .row3{display:grid; grid-template-columns:1fr 1fr 100px; gap:14px;}
-  input[type=text], input[type=number], input[type=email], input[type=password], input[type=search], select{
-    width:100%; background:var(--panel-alt); border:1px solid var(--border); color:var(--text);
-    font-family:'Inter',sans-serif; font-size:14px; padding:10px 12px; border-radius:9px; outline:none;
-    transition:border-color .15s ease, box-shadow .15s ease;
-  }
-  input:focus, select:focus{border-color:var(--poke-blue); box-shadow:0 0 0 3px rgba(42,117,187,.18);}
-  select{appearance:none; background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%); background-position:calc(100% - 18px) center, calc(100% - 13px) center; background-size:5px 5px,5px 5px; background-repeat:no-repeat;}
+  const setNames = useMemo(() => {
+    const seen = new Map();
+    cards.forEach((c) => {
+      if (c.set?.name && !seen.has(c.set.name)) seen.set(c.set.name, c.set.releaseDate || "");
+    });
+    const names = Array.from(seen.keys());
+    return ["Toutes les extensions", ...names];
+  }, [cards]);
 
-  .btn{font-family:'Baloo 2',sans-serif; font-weight:700; font-size:14.5px; border:none; border-radius:10px; padding:12px 22px; cursor:pointer; transition:filter .15s ease, transform .1s ease;}
-  .btn:active{transform:scale(.97);}
-  .btn-primary{background:var(--poke-red); color:#fff; box-shadow:0 3px 0 var(--poke-red-dim);}
-  .btn-primary:hover{filter:brightness(1.08);}
-  .btn-primary:active{box-shadow:0 1px 0 var(--poke-red-dim); transform:translateY(2px) scale(.98);}
-  .btn-primary:disabled{background:#4a4038; color:#8a8078; box-shadow:none; cursor:not-allowed;}
-  .btn-ghost{background:transparent; color:var(--muted); border:1px solid var(--border); font-size:12.5px; padding:8px 14px; font-family:'Inter',sans-serif; font-weight:600;}
-  .btn-ghost:hover{color:var(--text); border-color:var(--poke-yellow);}
+  const filteredCards = useMemo(() => {
+    return cards.filter((c) => {
+      if (setFilter !== "Toutes les extensions" && c.set?.name !== setFilter) return false;
+      if (missingOnly && owned.has(c.id)) return false;
+      return true;
+    });
+  }, [cards, setFilter, missingOnly, owned]);
 
-  .submit-row{display:flex; align-items:center; gap:12px; margin-top:6px;}
-  .ok-msg{font-size:13px; color:var(--grass); font-family:'IBM Plex Mono',monospace; opacity:0; transition:opacity .3s ease;}
-  .ok-msg.show{opacity:1;}
-  .err-msg{font-size:13px; color:#f2b9a0; font-family:'IBM Plex Mono',monospace; margin-top:8px;}
+  useEffect(() => {
+    setPage(0);
+  }, [setFilter, missingOnly]);
 
-  /* ── LIGNES DE CARTE (ajout multiple) ─────────────────────── */
-  .card-row{
-    border:1px solid var(--border); border-radius:12px; padding:14px 16px 2px;
-    margin-bottom:14px; background:var(--panel-alt); position:relative;
-  }
-  .card-row-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;}
-  .card-row-num{
-    font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.08em;
-    color:var(--poke-yellow); text-transform:uppercase;
-  }
-  .row-del-btn{
-    background:transparent; border:none; color:var(--muted); cursor:pointer; font-size:15px;
-    padding:2px 8px; border-radius:6px; line-height:1;
-  }
-  .row-del-btn:hover{color:var(--poke-red); background:rgba(227,53,13,.12);}
-  .row-del-btn:disabled{opacity:.25; cursor:not-allowed;}
-  .add-row-btn{margin-bottom:18px;}
-  .toolbar-row{display:flex; align-items:center; gap:10px; margin-bottom:18px; flex-wrap:wrap;}
-  .toolbar-row .add-row-btn{margin-bottom:0;}
+  const totalPages = Math.max(1, Math.ceil(filteredCards.length / PAGE_SIZE));
+  const pageCards = filteredCards.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
 
-  /* ── SAUVEGARDE / CHARGEMENT DE LISTES ────────────────────── */
-  .modal-overlay{
-    display:none; position:fixed; inset:0; background:rgba(10,11,18,.72);
-    z-index:50; align-items:center; justify-content:center; padding:20px;
-  }
-  .modal-overlay.show{display:flex;}
-  .modal-box{
-    background:var(--panel); border:2px solid var(--poke-yellow); border-radius:16px;
-    padding:24px; max-width:400px; width:100%; box-shadow:0 10px 0 rgba(0,0,0,.25);
-  }
-  .modal-box.modal-box-wide{max-width:520px;}
-  .modal-box h3{
-    font-family:'Baloo 2',sans-serif; font-size:18px; margin:0 0 16px; color:var(--paper);
-    display:flex; align-items:center; gap:8px;
-  }
-  .modal-actions{display:flex; gap:10px; margin-top:18px; justify-content:flex-end;}
-  .saved-list-item{
-    display:flex; align-items:center; justify-content:space-between; gap:12px;
-    padding:10px 12px; border:1px solid var(--border); border-radius:10px;
-    margin-bottom:8px; background:var(--panel-alt);
-  }
-  .saved-list-info{min-width:0;}
-  .saved-list-name{
-    font-family:'Baloo 2',sans-serif; font-weight:700; font-size:14px; color:var(--paper);
-    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-  }
-  .saved-list-meta{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted); margin-top:2px;}
-  .saved-list-actions{display:flex; align-items:center; gap:4px; flex-shrink:0;}
-  .saved-lists-empty{padding:20px; text-align:center; color:var(--muted); font-family:'IBM Plex Mono',monospace; font-size:13px;}
+  const ownedCount = cards.filter((c) => owned.has(c.id)).length;
+  const totalCount = cards.length;
+  const percent = totalCount > 0 ? Math.round((ownedCount / totalCount) * 100) : 0;
 
-  /* ── VUE "VÉRIFIER CARTES" ────────────────────────────────── */
-  .check-hint{font-size:12px; color:var(--muted); line-height:1.6; margin:0 0 18px; max-width:640px;}
-  .check-summary{display:flex; gap:12px; flex-wrap:wrap;}
-  .check-chip{
-    font-family:'IBM Plex Mono',monospace; font-size:13px; padding:9px 16px; border-radius:10px;
-    border:2px solid; font-weight:700;
-  }
-  .check-chip.new{color:var(--grass); border-color:var(--grass); background:rgba(76,175,109,.08);}
-  .check-chip.dupe{color:var(--poke-yellow); border-color:var(--poke-yellow-dim); background:rgba(255,203,5,.08);}
-  .status-badge{
-    font-family:'IBM Plex Mono',monospace; font-size:11px; padding:4px 9px; border-radius:7px;
-    font-weight:700; white-space:nowrap; display:inline-block;
-  }
-  .status-badge.new{color:var(--grass); background:rgba(76,175,109,.14);}
-  .status-badge.dupe{color:var(--poke-yellow); background:rgba(255,203,5,.14);}
+  return (
+    <div className="wrap">
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Inter:wght@400;500;600&display=swap');
 
-  /* ── VUE "MON STOCK" façon tableur ────────────────────────── */
-  .stock-toolbar{display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap;}
-  .stock-toolbar input[type=search]{max-width:260px;}
-  .stock-toolbar .count{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--muted); margin-left:auto;}
+        * { box-sizing: border-box; }
 
-  .sheet-scroll{overflow:auto; border:1px solid var(--border); border-radius:10px; max-height:70vh;}
-  table.sheet{border-collapse:collapse; width:100%; font-family:'IBM Plex Mono',monospace; font-size:12.5px;}
-  table.sheet thead th{
-    position:sticky; top:0; z-index:2;
-    background:var(--panel-alt); color:var(--paper); text-align:left; font-weight:600;
-    padding:9px 10px; border-bottom:2px solid var(--poke-yellow-dim); border-right:1px solid var(--border);
-    cursor:pointer; white-space:nowrap; user-select:none;
-  }
-  table.sheet thead th:hover{background:#2a3042;}
-  table.sheet thead th .arrow{color:var(--poke-yellow); margin-left:4px;}
-  table.sheet tbody td{
-    padding:8px 10px; border-bottom:1px solid var(--border); border-right:1px solid var(--border);
-    color:var(--text); white-space:nowrap;
-  }
-  table.sheet tbody tr:nth-child(even){background:var(--row-alt);}
-  table.sheet tbody tr:hover{background:#2a3049;}
-  table.sheet td.num{text-align:right; font-weight:600; color:var(--poke-yellow);}
-  table.sheet td.del{text-align:center; width:36px;}
-  .del-btn{
-    background:transparent; border:none; color:var(--muted); cursor:pointer; font-size:14px; padding:2px 6px; border-radius:5px;
-  }
-  .del-btn:hover{color:var(--poke-red); background:rgba(227,53,13,.12);}
-  .sheet-empty{padding:30px; text-align:center; color:var(--muted); font-family:'IBM Plex Mono',monospace; font-size:13px;}
-  tfoot td{
-    font-family:'IBM Plex Mono',monospace; font-weight:700; padding:10px; border-top:2px solid var(--poke-yellow-dim);
-    background:var(--panel-alt); color:var(--paper);
-  }
-</style>
-</head>
-<body>
+        .wrap {
+          --navy: #16283F;
+          --frost: #EAF6FB;
+          --pocket: #D3E9F2;
+          --teal: #1C8C93;
+          --amber: #E8A33D;
+          --ink: #1B2530;
+          font-family: 'Inter', sans-serif;
+          background: var(--frost);
+          min-height: 100%;
+          padding: 0 0 32px 0;
+          color: var(--ink);
+        }
 
-<div class="pokeball-bg">
-  <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-    <circle cx="100" cy="100" r="95" fill="none" stroke="#fff" stroke-width="6"/>
-    <path d="M5,100 A95,95 0 0 1 195,100" fill="none" stroke="#fff" stroke-width="10"/>
-    <line x1="5" y1="100" x2="195" y2="100" stroke="#fff" stroke-width="10"/>
-    <circle cx="100" cy="100" r="28" fill="#12141f" stroke="#fff" stroke-width="8"/>
-  </svg>
-</div>
+        .spine {
+          background: var(--navy);
+          color: #EAF6FB;
+          padding: 22px 20px 26px;
+          border-radius: 0 0 18px 18px;
+          position: relative;
+          overflow: hidden;
+        }
 
-<div class="wrap">
+        .spine::after {
+          content: '';
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(115deg, rgba(255,255,255,0.08) 0%, transparent 40%);
+          pointer-events: none;
+        }
 
-  <header>
-    <div>
-      <p class="eyebrow"><span class="live-dot"></span>Connecté à ta base en ligne</p>
-      <h1>Mon Classeur Pokémon</h1>
-    </div>
-    <div class="headerRight">
-      <div class="statchip">
-        <span class="n" id="statTotal">–</span>
-        <span class="l">cartes en stock</span>
-      </div>
-      <button class="btn btn-ghost" id="logoutBtn" style="display:none;">Se déconnecter</button>
-    </div>
-  </header>
+        .spine h1 {
+          font-family: 'Baloo 2', sans-serif;
+          font-weight: 800;
+          font-size: 26px;
+          margin: 0 0 4px 0;
+          letter-spacing: 0.2px;
+        }
 
-  <!-- SETUP STATE -->
-  <div class="setup" id="setupBox" style="display:none;">
-    <h2>Configuration requise</h2>
-    <p>Ouvre <code>index.html</code> et remplace l'objet <code>firebaseConfig</code> tout en haut du script par celui de ton projet Firebase (Project Settings → tes applications → objet de configuration SDK). Recharge ensuite la page.</p>
-  </div>
+        .spine p {
+          margin: 0 0 16px 0;
+          font-size: 13.5px;
+          color: #AFCBDA;
+        }
 
-  <!-- LOGIN STATE -->
-  <div class="login-box" id="loginBox" style="display:none;">
-    <h2>⚡ Connexion Dresseur</h2>
-    <div class="field">
-      <label for="loginEmail">Email</label>
-      <input type="email" id="loginEmail" placeholder="toi@exemple.com">
-    </div>
-    <div class="field">
-      <label for="loginPassword">Mot de passe</label>
-      <input type="password" id="loginPassword">
-    </div>
-    <div class="submit-row">
-      <button class="btn btn-primary" id="loginBtn">Se connecter</button>
-    </div>
-    <div class="err-msg" id="loginErr"></div>
-  </div>
+        .meter-row {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
 
-  <!-- APP STATE -->
-  <div class="app" id="app">
+        .meter-track {
+          flex: 1;
+          height: 10px;
+          border-radius: 6px;
+          background: rgba(255,255,255,0.14);
+          overflow: hidden;
+        }
 
-    <nav class="tabs">
-      <button class="tab-btn active" id="tabAdd" data-view="view-add">+ Ajouter des cartes</button>
-      <button class="tab-btn" id="tabCheck" data-view="view-check">🔍 Vérifier cartes</button>
-      <button class="tab-btn" id="tabStock" data-view="view-stock">📋 Mon stock</button>
-    </nav>
+        .meter-fill {
+          height: 100%;
+          border-radius: 6px;
+          background: linear-gradient(90deg, #1C8C93, #7FDCE3);
+          transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+        }
 
-    <!-- VUE : AJOUTER DES CARTES -->
-    <div class="view active" id="view-add">
-      <div class="panel">
-        <h2><span class="dot"></span>Ajouter des cartes</h2>
-        <form id="cardForm">
+        .meter-label {
+          font-family: 'Baloo 2', sans-serif;
+          font-weight: 700;
+          font-size: 15px;
+          white-space: nowrap;
+          min-width: 44px;
+          text-align: right;
+        }
 
-          <datalist id="collectionList"></datalist>
-          <datalist id="serieList"></datalist>
+        .meter-count {
+          font-size: 12px;
+          color: #AFCBDA;
+          margin-top: 6px;
+        }
 
-          <div id="rowsContainer"></div>
+        .controls {
+          display: flex;
+          gap: 8px;
+          padding: 16px 20px 4px;
+          flex-wrap: wrap;
+          align-items: center;
+        }
 
-          <div class="toolbar-row">
-            <button type="button" class="btn btn-ghost add-row-btn" id="addRowBtn">+ Ajouter une ligne</button>
-            <button type="button" class="btn btn-ghost add-row-btn" id="loadListBtn">📂 Retrouver liste</button>
+        .controls select {
+          font-family: 'Inter', sans-serif;
+          font-size: 13px;
+          padding: 8px 10px;
+          border-radius: 8px;
+          border: 1px solid #BFDCE7;
+          background: white;
+          color: var(--ink);
+          flex: 1;
+          min-width: 160px;
+        }
+
+        .toggle-btn {
+          font-family: 'Inter', sans-serif;
+          font-size: 13px;
+          font-weight: 500;
+          padding: 8px 12px;
+          border-radius: 8px;
+          border: 1px solid #BFDCE7;
+          background: white;
+          cursor: pointer;
+          white-space: nowrap;
+        }
+
+        .page-panel {
+          margin: 12px 20px 0;
+          background: #F6FBFD;
+          border-radius: 16px;
+          padding: 18px 14px 14px;
+          box-shadow: inset 0 0 0 1px #D6EAF1;
+          position: relative;
+        }
+
+        .holes {
+          position: absolute;
+          left: 6px;
+          top: 18px;
+          bottom: 18px;
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+        }
+
+        .holes span {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background: var(--frost);
+          box-shadow: inset 0 0 0 1px #BFDCE7;
+          display: block;
+        }
+
+        .grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 8px;
+          padding-left: 14px;
+        }
+
+        .pocket {
+          aspect-ratio: 63 / 88;
+          background: var(--pocket);
+          border-radius: 8px;
+          position: relative;
+          cursor: pointer;
+          overflow: hidden;
+          border: 1.5px dashed #A9CEDC;
+          transition: transform 0.15s ease, border-color 0.15s ease;
+        }
+
+        .pocket:active {
+          transform: scale(0.96);
+        }
+
+        .pocket.owned {
+          border: 1.5px solid var(--teal);
+        }
+
+        .pocket img {
+          width: 100%;
+          height: 100%;
+          object-fit: contain;
+          display: block;
+        }
+
+        .pocket:not(.owned) img {
+          filter: grayscale(1) opacity(0.55);
+        }
+
+        .badge {
+          position: absolute;
+          top: 4px;
+          right: 4px;
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+          background: var(--teal);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+        }
+
+        .empty-pocket {
+          width: 100%;
+          height: 100%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .pager {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 14px 20px 0;
+        }
+
+        .pager button {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          background: var(--navy);
+          color: white;
+          border: none;
+          border-radius: 8px;
+          padding: 9px 13px;
+          font-size: 13px;
+          font-family: 'Inter', sans-serif;
+          cursor: pointer;
+        }
+
+        .pager button:disabled {
+          opacity: 0.35;
+          cursor: default;
+        }
+
+        .pager .page-num {
+          font-size: 13px;
+          color: #5A7484;
+        }
+
+        .state-box {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+          padding: 60px 20px;
+          color: #5A7484;
+          font-size: 14px;
+          text-align: center;
+        }
+
+        .retry-btn {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          background: var(--navy);
+          color: white;
+          border: none;
+          border-radius: 8px;
+          padding: 9px 14px;
+          font-size: 13px;
+          cursor: pointer;
+        }
+
+        .spin {
+          animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
+
+      <div className="spine">
+        <h1>Masterset Lokhlass</h1>
+        <p>Toutes les cartes Lokhlass, toutes extensions confondues</p>
+        <div className="meter-row">
+          <div className="meter-track">
+            <div className="meter-fill" style={{ width: `${percent}%` }} />
           </div>
-
-          <div class="submit-row">
-            <button type="submit" class="btn btn-primary" id="submitBtn">+ Enregistrer la carte</button>
-            <span class="ok-msg" id="okMsg"></span>
-          </div>
-          <div class="err-msg" id="errMsg"></div>
-        </form>
-
-        <div class="import-row" style="margin-top:18px; padding-top:16px; border-top:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
-          <div class="hint" style="font-size:12px; color:var(--muted); max-width:480px; line-height:1.5;">À utiliser une seule fois : importe tes cartes déjà présentes dans ton ancien fichier Excel (stock_seed.json) vers la base en ligne.</div>
-          <button class="btn btn-ghost" id="importBtn">Importer mon stock existant</button>
+          <div className="meter-label">{percent}%</div>
+        </div>
+        <div className="meter-count">
+          {ownedCount} / {totalCount || "…"} cartes obtenues
         </div>
       </div>
-    </div>
 
-    <!-- VUE : VÉRIFIER CARTES -->
-    <div class="view" id="view-check">
-      <div class="panel">
-        <h2><span class="dot" style="background:var(--psychic)"></span>Vérifier des cartes</h2>
-        <p class="check-hint">Renseigne une liste de cartes pour voir combien sont déjà dans ton stock et combien sont nouvelles. Rien n'est enregistré ici.</p>
-        <form id="checkForm">
-          <div id="checkRowsContainer"></div>
+      {status === "loading" && (
+        <div className="state-box">
+          <Loader2 size={26} className="spin" />
+          Chargement des cartes Lokhlass…
+        </div>
+      )}
 
-          <button type="button" class="btn btn-ghost add-row-btn" id="addCheckRowBtn">+ Ajouter une ligne</button>
+      {status === "error" && (
+        <div className="state-box">
+          Impossible de charger les cartes pour le moment.
+          <button className="retry-btn" onClick={fetchCards}>
+            <RotateCcw size={14} /> Réessayer
+          </button>
+        </div>
+      )}
 
-          <div class="submit-row">
-            <button type="submit" class="btn btn-primary" id="checkBtn">🔍 Vérifier la carte</button>
-          </div>
-          <div class="err-msg" id="checkErrMsg"></div>
-        </form>
-
-        <div id="checkResults" style="display:none; margin-top:22px; padding-top:18px; border-top:1px solid var(--border);">
-          <div class="check-summary" id="checkSummary"></div>
-          <div class="sheet-scroll" style="margin-top:14px;">
-            <table class="sheet" id="checkTable">
-              <thead>
-                <tr>
-                  <th>Collection</th>
-                  <th>Série</th>
-                  <th>N°</th>
-                  <th>Carte</th>
-                  <th>Langue</th>
-                  <th>Version</th>
-                  <th>Qté</th>
-                  <th>Statut</th>
-                </tr>
-              </thead>
-              <tbody id="checkBody"></tbody>
-            </table>
+      {status === "ready" && (
+        <>
+          <div className="controls">
+            <select value={setFilter} onChange={(e) => setSetFilter(e.target.value)}>
+              {setNames.map((name) => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+            <button
+              className="toggle-btn"
+              style={{ background: missingOnly ? "#E8A33D" : "white" }}
+              onClick={() => setMissingOnly((v) => !v)}
+            >
+              {missingOnly ? "Manquantes seulement ✓" : "Manquantes seulement"}
+            </button>
           </div>
 
-          <div class="saveListBlock" style="margin-top:18px; padding-top:16px; border-top:1px solid var(--border); display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap;">
-            <div class="field" style="max-width:280px; margin-bottom:0; flex:1; min-width:200px;">
-              <label for="saveListName">Nom de la liste</label>
-              <input type="text" id="saveListName" placeholder="Ex : Commande Vinted du 30/08">
+          <div className="page-panel">
+            <div className="holes">
+              <span /><span /><span /><span /><span />
             </div>
-            <button type="button" class="btn btn-primary" id="saveListBtn">💾 Sauvegarder cette liste</button>
-            <span class="ok-msg" id="saveListOkMsg"></span>
+            <div className="grid">
+              {pageCards.map((card) => {
+                const isOwned = owned.has(card.id);
+                return (
+                  <div
+                    key={card.id}
+                    className={`pocket ${isOwned ? "owned" : ""}`}
+                    onClick={() => toggleOwned(card.id)}
+                    title={`${card.name} · ${card.set?.name || ""} · n°${card.number}`}
+                  >
+                    {card.images?.small ? (
+                      <img src={card.images.small} alt={card.name} loading="lazy" />
+                    ) : (
+                      <div className="empty-pocket">?</div>
+                    )}
+                    {isOwned && (
+                      <div className="badge">
+                        <Check size={12} color="white" strokeWidth={3} />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {pageCards.length === 0 && (
+                <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "30px 0", color: "#5A7484", fontSize: 13 }}>
+                  Aucune carte pour ce filtre.
+                </div>
+              )}
+            </div>
           </div>
-          <div class="err-msg" id="saveListErrMsg"></div>
-        </div>
-      </div>
+
+          <div className="pager">
+            <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}>
+              <ChevronLeft size={15} /> Précédent
+            </button>
+            <div className="page-num">Page {page + 1} / {totalPages}</div>
+            <button onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}>
+              Suivant <ChevronRight size={15} />
+            </button>
+          </div>
+        </>
+      )}
     </div>
-
-    <!-- VUE : MON STOCK (façon tableur) -->
-    <div class="view" id="view-stock">
-      <div class="panel">
-        <h2><span class="dot" style="background:var(--poke-blue)"></span>Mon stock</h2>
-
-        <div class="stock-toolbar">
-          <input type="search" id="stockSearch" placeholder="Rechercher (carte, collection, série...)">
-          <span class="count" id="stockCount"></span>
-        </div>
-
-        <div class="sheet-scroll">
-          <table class="sheet" id="stockTable">
-            <thead>
-              <tr>
-                <th data-key="collection">Collection<span class="arrow"></span></th>
-                <th data-key="serie">Série<span class="arrow"></span></th>
-                <th data-key="numCarte">N°<span class="arrow"></span></th>
-                <th data-key="carte">Carte<span class="arrow"></span></th>
-                <th data-key="langue">Langue<span class="arrow"></span></th>
-                <th data-key="version">Version<span class="arrow"></span></th>
-                <th data-key="quantite">Qté<span class="arrow"></span></th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody id="stockBody">
-              <tr><td colspan="8" class="sheet-empty">Chargement…</td></tr>
-            </tbody>
-            <tfoot>
-              <tr>
-                <td colspan="6" style="text-align:right;">Total</td>
-                <td id="stockFooterTotal" style="text-align:right;">0</td>
-                <td></td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      </div>
-    </div>
-
-  </div>
-
-</div>
-
-<!-- MODALE : listes sauvegardées -->
-<div class="modal-overlay" id="listsModal">
-  <div class="modal-box modal-box-wide">
-    <h3>📂 Listes sauvegardées</h3>
-    <div id="savedListsBody">
-      <div class="saved-lists-empty">Chargement…</div>
-    </div>
-    <div class="modal-actions">
-      <button class="btn btn-ghost" id="listsModalCloseBtn">Fermer</button>
-    </div>
-  </div>
-</div>
-
-<script type="module">
-// ─── CONFIGURATION ──────────────────────────────────────────────
-const firebaseConfig = {
-  apiKey: "AIzaSyAF-swuqm4XFf2nzlBmTcJKCbPrmlII3zk",
-  authDomain: "pokemon-stock-49d81.firebaseapp.com",
-  projectId: "pokemon-stock-49d81",
-  storageBucket: "pokemon-stock-49d81.firebasestorage.app",
-  messagingSenderId: "6621564022",
-  appId: "1:6621564022:web:1bc9a57e393d8924eca357"
-};
-// ─────────────────────────────────────────────────────────────────
-
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
-import {
-  getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged
-} from "https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js";
-import {
-  getFirestore, collection, addDoc, getDocs, query, orderBy, limit,
-  writeBatch, doc, deleteDoc, updateDoc, increment, serverTimestamp
-} from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
-
-const BDD_MAP_URL = "bdd_map.json";
-const SEED_URL = "stock_seed.json";
-
-// Liste de référence des Collections (issue de ta base) — utilisée pour l'autocomplétion
-const KNOWN_COLLECTIONS = [
-  "Méga-Evolution","Ecarlate et Violet","Epée et Bouclier","Soleil et Lune","XY","Noir et Blanc",
-  "Appel des légendes","HeartGold SoulSilver","Platine","Diamant et Perle","EX","Wizards",
-  "Ligue Pokemon","Jumbos","McDonald's","Divers","World Championships","Promos","Kit du Dresseur"
-];
-
-// Liste de référence des Séries (issue de ta base) — utilisée pour l'autocomplétion
-const KNOWN_SERIES = [
-  "Nuit Noire","Chaos Ascendant","Equilibre Parfait","Héroes Transcendants","Flammes Fantasmagoriques",
-  "Méga-Evolution","Energies Méga-Evolution","Promos Méga-Evolution","Flamme Blanche","Foudre Noire",
-  "Rivalités Destinées","Aventures Ensemble","Evolutions Primastiques","Etincelles Déferlantes",
-  "Couronne Stellaire","Fable Nebuleuse","Mascarade Crépusculaire","Forces Temporelles",
-  "Destinées de Paldea","Faille Paradoxe","151","Flammes Obsidiennes","Evolutions à Paldea",
-  "Ecarlate et Violet","Energies Ecarlate et Violet","Promos Ecarlate et Violet","Zénith Suprême",
-  "Tempête Argentée","Origine Perdue","Pokemon GO","Astres Radieux","Stars Etincelantes",
-  "Poing de Fusion","Célébraions","Evolution Céleste","Règne de Glace","Styles de Combat",
-  "Destinées Radieuses","Voltage Eclatant","La Voie du Maître","Ténèbres Embrasées","Clash des Rebelles",
-  "Epée et Bouclier","Promos Epee et Bouclier","Eclipse Cosmique","Destinées Occultes",
-  "Harmonie des Esprits","Alliance Infaillible","Duo de Choc","Tonerre Perdu","Majesté des Dragons",
-  "Tempête Céleste","Lumière Interdite","Ultra-Prisme","Invasion Carmin","Légendes Brillantes",
-  "Ombres Ardentes","Gardiens Ascendants","Soleil et Lune","Promos Soleil et Lune","Evolutions",
-  "Offensive Vapeur","Impact des Destins","Générations","Rupture Turbo","Impulsion Turbo",
-  "Origine Antiques","Ciel Rugissant","Double Danger","Primo-Choc","Vigeur Spectrale","Poings Furieux",
-  "Etincelles","XY","Bienvenue à Kalos","Promos X&Y","Legendary Treasures","Explosion Plasma",
-  "Glaciation Plasma","Tempête Plasma","Frontières Franchies","Coffre des Dragons","Dragons Exaltés",
-  "Explorateurs Obscurs","Destinées Futures","Nobles Victoires","Pouvoirs Emergents","Noir & Blanc",
-  "Promos Black Star Noir & Blanc","L'appel des légendes","Triomphe","Indomptable","Déchainement",
-  "HeartGold SoulSilver","Promos Black Star HeartGold SoulSilver","Arceus","Vainqueurs Suprêmes",
-  "Rivaux Emergeants","Platine","Tempête","Eveil des Légendes","Aube Majestueuse","Duels au Sommet",
-  "Merveilles Secrètes","Trésors Mystérieux","Diamant & Perle","Promos Black Star DP",
-  "Gardiens du Pouvoir","Ile des Dragons","Gardiens de Cristal","Fantômes Holon",
-  "Créateurs de Légendes","Espèces Delta","Forces Cachées","Emeraude","Deoxys","Team Rocket Returns",
-  "Rouge Feu & Vert Feuille","Légendes Oubliées","Team Magma VS Team Aqua","Dragon",
-  "Tempête de Sable","Rubis & Saphir","Black Star Nintendo","Skyridge","Aquapolis","Expedition",
-  "Legendary Collection","Neo Destiny","Neo Revelation","Neo Discovery","Neo Genesis",
-  "Gym Challengde","Gym Heroes","Team Rocket","Base Set 2","Fossile","Jungle","Set de base",
-  "Promo Black Star Wizards of The Coast","Pack Recompense","POP 9","POP 8","POP 7","POP 6","POP 5",
-  "POP 4","POP 3","POP 2","POP 1","Jumbo","Promo McDonald's 2024","Promo McDonald's 2023",
-  "Promo McDonald's 2022","Promo McDonald's 2021","Promo McDonald's 2019","Promo McDonald's 2019 - USA",
-  "Promo McDonald's 2018 - USA","Promo McDonald's 2017","Promo McDonald's 2016","Promo McDonald's 2015",
-  "Promo McDonald's 2014","Promo McDonald's 2013","Promo McDonald's 2012","Promo McDonald's 2011",
-  "Energies"
-];
-
-let db = null;
-let bddMap = {};
-let allCards = []; // { id, collection, serie, numCarte, carte, langue, version, quantite }
-let sortKey = 'collection';
-let sortDir = 1;
-let rowIdCounter = 0;
-
-const statTotal = document.getElementById('statTotal');
-const setupBox = document.getElementById('setupBox');
-const loginBox = document.getElementById('loginBox');
-const app = document.getElementById('app');
-const logoutBtn = document.getElementById('logoutBtn');
-const loginBtn = document.getElementById('loginBtn');
-const loginErr = document.getElementById('loginErr');
-const cardForm = document.getElementById('cardForm');
-const okMsg = document.getElementById('okMsg');
-const errMsg = document.getElementById('errMsg');
-const submitBtn = document.getElementById('submitBtn');
-const importBtn = document.getElementById('importBtn');
-const collectionList = document.getElementById('collectionList');
-const serieList = document.getElementById('serieList');
-const rowsContainer = document.getElementById('rowsContainer');
-const addRowBtn = document.getElementById('addRowBtn');
-const loadListBtn = document.getElementById('loadListBtn');
-
-const tabAdd = document.getElementById('tabAdd');
-const tabCheck = document.getElementById('tabCheck');
-const tabStock = document.getElementById('tabStock');
-const viewAdd = document.getElementById('view-add');
-const viewCheck = document.getElementById('view-check');
-const viewStock = document.getElementById('view-stock');
-
-const checkForm = document.getElementById('checkForm');
-const checkRowsContainer = document.getElementById('checkRowsContainer');
-const addCheckRowBtn = document.getElementById('addCheckRowBtn');
-const checkBtn = document.getElementById('checkBtn');
-const checkErrMsg = document.getElementById('checkErrMsg');
-const checkResults = document.getElementById('checkResults');
-const checkSummary = document.getElementById('checkSummary');
-const checkBody = document.getElementById('checkBody');
-const saveListName = document.getElementById('saveListName');
-const saveListBtn = document.getElementById('saveListBtn');
-const saveListOkMsg = document.getElementById('saveListOkMsg');
-const saveListErrMsg = document.getElementById('saveListErrMsg');
-const listsModal = document.getElementById('listsModal');
-const savedListsBody = document.getElementById('savedListsBody');
-const listsModalCloseBtn = document.getElementById('listsModalCloseBtn');
-const stockSearch = document.getElementById('stockSearch');
-const stockBody = document.getElementById('stockBody');
-const stockCount = document.getElementById('stockCount');
-const stockFooterTotal = document.getElementById('stockFooterTotal');
-
-function escapeHtml(str){
-  return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
-
-function norm(v){
-  return String(v || '').trim().toLowerCase();
-}
-
-// Compare deux fiches carte (mêmes collection/série/n°/nom/langue/version)
-function sameCard(a, b){
-  return norm(a.collection) === norm(b.collection) &&
-         norm(a.serie) === norm(b.serie) &&
-         norm(a.numCarte) === norm(b.numCarte) &&
-         norm(a.carte) === norm(b.carte) &&
-         norm(a.langue) === norm(b.langue) &&
-         norm(a.version) === norm(b.version);
-}
-
-// Cherche une carte identique déjà en stock
-function findDuplicateInStock(cardData){
-  return allCards.find(c => sameCard(c, cardData));
-}
-
-// ── Navigation entre les pages ────────────────────────────────
-const VIEW_TABS = [
-  { view: viewAdd, tab: tabAdd, id: 'view-add' },
-  { view: viewCheck, tab: tabCheck, id: 'view-check' },
-  { view: viewStock, tab: tabStock, id: 'view-stock' }
-];
-function switchView(viewId){
-  VIEW_TABS.forEach(({view, tab, id}) => {
-    view.classList.toggle('active', id === viewId);
-    tab.classList.toggle('active', id === viewId);
-  });
-}
-tabAdd.addEventListener('click', () => switchView('view-add'));
-tabCheck.addEventListener('click', () => switchView('view-check'));
-tabStock.addEventListener('click', () => switchView('view-stock'));
-
-if(firebaseConfig.apiKey.includes("TON-API-KEY") || firebaseConfig.apiKey.includes("YOUR-API-KEY")){
-  setupBox.style.display = 'block';
-} else {
-  const fbApp = initializeApp(firebaseConfig);
-  const auth = getAuth(fbApp);
-  db = getFirestore(fbApp);
-
-  onAuthStateChanged(auth, async (user) => {
-    if(user){
-      loginBox.style.display = 'none';
-      logoutBtn.style.display = 'inline-block';
-      app.classList.add('active');
-      await loadData();
-    } else {
-      loginBox.style.display = 'block';
-      logoutBtn.style.display = 'none';
-      app.classList.remove('active');
-    }
-  });
-
-  loginBtn.addEventListener('click', async () => {
-    loginErr.textContent = '';
-    const email = document.getElementById('loginEmail').value.trim();
-    const password = document.getElementById('loginPassword').value;
-    if(!email || !password){
-      loginErr.textContent = "Renseigne ton email et ton mot de passe.";
-      return;
-    }
-    loginBtn.disabled = true;
-    try{
-      await signInWithEmailAndPassword(auth, email, password);
-    }catch(err){
-      loginErr.textContent = "Connexion impossible : " + err.message;
-    }
-    loginBtn.disabled = false;
-  });
-
-  logoutBtn.addEventListener('click', () => signOut(auth));
-
-  async function loadData(){
-    try{
-      const res = await fetch(BDD_MAP_URL);
-      bddMap = await res.json();
-    }catch(e){ bddMap = {}; }
-    populateDatalists();
-    if(!rowsContainer.querySelector('.card-row')) addManager.addRow();
-    if(!checkRowsContainer.querySelector('.card-row')) checkManager.addRow();
-    await refreshAll();
-  }
-
-  function populateDatalists(){
-    const collections = [...new Set([...KNOWN_COLLECTIONS, ...Object.keys(bddMap)])];
-    collectionList.innerHTML = collections.map(c => `<option value="${escapeHtml(c)}">`).join('');
-    const series = [...new Set([...KNOWN_SERIES, ...Object.values(bddMap).flat()])];
-    serieList.innerHTML = series.map(s => `<option value="${escapeHtml(s)}">`).join('');
-  }
-
-  // ── Gestion des lignes du formulaire d'ajout ──────────────
-  const LANGUE_OPTIONS = ['FR','EN','JP','US','IT','DE','ES'];
-  const VERSION_OPTIONS = ['Standard','Reverse','Holo','Full Art','Secrète','Promo'];
-  function selectOptionsHtml(values, selected){
-    return values.map(v => `<option value="${v}" ${v === selected ? 'selected' : ''}>${v}</option>`).join('');
-  }
-
-  function rowTemplate(id, prefill = {}){
-    return `
-    <div class="card-row" data-row-id="${id}">
-      <div class="card-row-head">
-        <span class="card-row-num"></span>
-        <button type="button" class="row-del-btn" title="Supprimer cette ligne">✕</button>
-      </div>
-      <div class="row2">
-        <div class="field">
-          <label>Collection</label>
-          <input type="text" class="f-collection" list="collectionList" placeholder="Ex : Ecarlate et Violet" value="${escapeHtml(prefill.collection || '')}" required>
-        </div>
-        <div class="field">
-          <label>Série</label>
-          <input type="text" class="f-serie" list="serieList" placeholder="Ex : Flamme Blanche" value="${escapeHtml(prefill.serie || '')}" required>
-        </div>
-      </div>
-      <div class="row2">
-        <div class="field">
-          <label>N° carte</label>
-          <input type="text" class="f-num" placeholder="Ex : 43" value="${escapeHtml(prefill.numCarte || '')}">
-        </div>
-        <div class="field">
-          <label>Nom de la carte</label>
-          <input type="text" class="f-nom" placeholder="Ex : Sidérella" value="${escapeHtml(prefill.carte || '')}" required>
-        </div>
-      </div>
-      <div class="row3">
-        <div class="field">
-          <label>Langue</label>
-          <select class="f-langue">${selectOptionsHtml(LANGUE_OPTIONS, prefill.langue || 'FR')}</select>
-        </div>
-        <div class="field">
-          <label>Version</label>
-          <select class="f-version">${selectOptionsHtml(VERSION_OPTIONS, prefill.version || 'Standard')}</select>
-        </div>
-        <div class="field">
-          <label>Qté</label>
-          <input type="number" class="f-qte" value="${Number(prefill.quantite) || 1}" min="1" required>
-        </div>
-      </div>
-    </div>`;
-  }
-
-  // Fabrique un gestionnaire de lignes indépendant pour un conteneur donné
-  // (réutilisé par le formulaire "Ajouter" et le formulaire "Vérifier").
-  function createRowManager(containerEl, submitBtnEl, singularLabel, pluralLabelFn){
-    function addRow(prefill = {}){
-      rowIdCounter++;
-      const wrapper = document.createElement('div');
-      wrapper.innerHTML = rowTemplate(rowIdCounter, prefill).trim();
-      const rowEl = wrapper.firstChild;
-      containerEl.appendChild(rowEl);
-      rowEl.querySelector('.row-del-btn').addEventListener('click', () => removeRow(rowEl));
-      refreshChrome();
-      rowEl.querySelector('.f-collection').focus();
-    }
-
-    function removeRow(rowEl){
-      rowEl.remove();
-      if(!containerEl.querySelector('.card-row')) addRow();
-      refreshChrome();
-    }
-
-    function refreshChrome(){
-      const rows = containerEl.querySelectorAll('.card-row');
-      rows.forEach((row, i) => {
-        row.querySelector('.card-row-num').textContent = 'Carte ' + (i + 1);
-        row.querySelector('.row-del-btn').disabled = rows.length <= 1;
-      });
-      if(submitBtnEl) submitBtnEl.textContent = rows.length <= 1 ? singularLabel : pluralLabelFn(rows.length);
-    }
-
-    function getLastValues(){
-      const rows = containerEl.querySelectorAll('.card-row');
-      if(!rows.length) return {};
-      const last = rows[rows.length - 1];
-      return {
-        collection: last.querySelector('.f-collection').value.trim(),
-        serie: last.querySelector('.f-serie').value.trim()
-      };
-    }
-
-    function collectRows(){
-      return Array.from(containerEl.querySelectorAll('.card-row')).map(row => ({
-        collection: row.querySelector('.f-collection').value.trim(),
-        serie: row.querySelector('.f-serie').value.trim(),
-        numCarte: row.querySelector('.f-num').value.trim(),
-        carte: row.querySelector('.f-nom').value.trim(),
-        langue: row.querySelector('.f-langue').value,
-        version: row.querySelector('.f-version').value,
-        quantite: Number(row.querySelector('.f-qte').value) || 1
-      }));
-    }
-
-    return { addRow, removeRow, getLastValues, collectRows };
-  }
-
-  const addManager = createRowManager(
-    rowsContainer, submitBtn,
-    '+ Enregistrer la carte',
-    n => `+ Enregistrer les ${n} cartes`
   );
-  const checkManager = createRowManager(
-    checkRowsContainer, checkBtn,
-    '🔍 Vérifier la carte',
-    n => `🔍 Vérifier les ${n} cartes`
-  );
-
-  addRowBtn.addEventListener('click', () => addManager.addRow(addManager.getLastValues()));
-  addCheckRowBtn.addEventListener('click', () => {
-    checkManager.addRow(checkManager.getLastValues());
-    checkResults.style.display = 'none';
-  });
-  checkRowsContainer.addEventListener('input', () => { checkResults.style.display = 'none'; });
-
-  // Recharge le total + le tableau complet depuis Firestore
-  async function refreshAll(){
-    const snap = await getDocs(collection(db, 'stock'));
-    allCards = [];
-    let total = 0;
-    snap.forEach(d => {
-      const data = d.data();
-      total += Number(data.quantite) || 0;
-      allCards.push({ id: d.id, ...data });
-    });
-    statTotal.textContent = total;
-    statTotal.classList.add('bump');
-    setTimeout(()=>statTotal.classList.remove('bump'), 250);
-    renderStockTable();
-  }
-
-  // ── Rendu du tableau "Mon stock" ──────────────────────────
-  function renderStockTable(){
-    const term = stockSearch.value.trim().toLowerCase();
-    let rows = allCards.filter(c => {
-      if(!term) return true;
-      return ['collection','serie','numCarte','carte','langue','version']
-        .some(k => String(c[k] || '').toLowerCase().includes(term));
-    });
-
-    rows.sort((a,b) => {
-      let va = a[sortKey], vb = b[sortKey];
-      if(sortKey === 'quantite'){ va = Number(va)||0; vb = Number(vb)||0; return (va-vb)*sortDir; }
-      va = String(va||'').toLowerCase(); vb = String(vb||'').toLowerCase();
-      return va.localeCompare(vb) * sortDir;
-    });
-
-    stockCount.textContent = rows.length + ' carte(s)';
-
-    if(!rows.length){
-      stockBody.innerHTML = '<tr><td colspan="8" class="sheet-empty">Aucune carte ne correspond.</td></tr>';
-      stockFooterTotal.textContent = '0';
-      return;
-    }
-
-    stockBody.innerHTML = rows.map(c => `
-      <tr>
-        <td>${escapeHtml(c.collection || '')}</td>
-        <td>${escapeHtml(c.serie || '')}</td>
-        <td>${escapeHtml(c.numCarte || '—')}</td>
-        <td>${escapeHtml(c.carte || '')}</td>
-        <td>${escapeHtml(c.langue || '')}</td>
-        <td>${escapeHtml(c.version || '')}</td>
-        <td class="num">${Number(c.quantite)||0}</td>
-        <td class="del"><button class="del-btn" data-id="${c.id}" title="Supprimer">✕</button></td>
-      </tr>
-    `).join('');
-
-    const totalQte = rows.reduce((sum,c) => sum + (Number(c.quantite)||0), 0);
-    stockFooterTotal.textContent = totalQte;
-
-    stockBody.querySelectorAll('.del-btn').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        if(!confirm('Supprimer cette carte du stock ?')) return;
-        btn.disabled = true;
-        try{
-          await deleteDoc(doc(db, 'stock', btn.dataset.id));
-          await refreshAll();
-        }catch(err){
-          alert("Erreur lors de la suppression : " + err.message);
-          btn.disabled = false;
-        }
-      });
-    });
-  }
-
-  stockSearch.addEventListener('input', renderStockTable);
-
-  document.querySelectorAll('table.sheet thead th[data-key]').forEach(th => {
-    th.addEventListener('click', () => {
-      const key = th.dataset.key;
-      if(sortKey === key){ sortDir *= -1; } else { sortKey = key; sortDir = 1; }
-      document.querySelectorAll('table.sheet thead th .arrow').forEach(a => a.textContent = '');
-      th.querySelector('.arrow').textContent = sortDir === 1 ? ' ▲' : ' ▼';
-      renderStockTable();
-    });
-  });
-
-  // Enregistre plusieurs cartes en une seule opération atomique.
-  // Les lignes identiques entre elles sont fusionnées, et toute carte déjà
-  // présente en stock voit simplement sa quantité incrémentée.
-  async function saveMultipleCards(rows){
-    const merged = [];
-    rows.forEach(r => {
-      const existing = merged.find(m => sameCard(m, r));
-      if(existing) existing.quantite += r.quantite;
-      else merged.push({ ...r });
-    });
-
-    const batch = writeBatch(db);
-    let newCount = 0, mergedCount = 0;
-    merged.forEach(cardData => {
-      const doublon = findDuplicateInStock(cardData);
-      if(doublon){
-        batch.update(doc(db, 'stock', doublon.id), { quantite: increment(cardData.quantite) });
-        mergedCount++;
-      } else {
-        batch.set(doc(collection(db, 'stock')), { ...cardData, createdAt: serverTimestamp() });
-        newCount++;
-      }
-    });
-    await batch.commit();
-    return { newCount, mergedCount };
-  }
-
-  function finishSubmit(newCount, mergedCount, lastVals){
-    let msg;
-    if(newCount && mergedCount) msg = `${newCount} carte(s) ajoutée(s), ${mergedCount} fusionnée(s) avec le stock ✓`;
-    else if(mergedCount) msg = `${mergedCount} carte(s) fusionnée(s) avec le stock existant ✓`;
-    else msg = `${newCount} carte(s) ajoutée(s) ✓`;
-
-    okMsg.textContent = msg;
-    okMsg.classList.add('show');
-    setTimeout(()=>okMsg.classList.remove('show'), 2400);
-
-    rowsContainer.innerHTML = '';
-    addManager.addRow(lastVals);
-
-    refreshAll();
-  }
-
-  cardForm.addEventListener('submit', async e => {
-    e.preventDefault();
-    errMsg.textContent = '';
-
-    const rows = addManager.collectRows();
-    const invalidIndex = rows.findIndex(r => !r.collection || !r.serie || !r.carte);
-    if(invalidIndex !== -1){
-      errMsg.textContent = `Merci de renseigner au moins la Collection, la Série et le nom de la carte pour la carte n°${invalidIndex + 1}.`;
-      return;
-    }
-
-    submitBtn.disabled = true;
-    try{
-      const lastVals = addManager.getLastValues();
-      const { newCount, mergedCount } = await saveMultipleCards(rows);
-      finishSubmit(newCount, mergedCount, lastVals);
-    }catch(err){
-      errMsg.textContent = "Erreur lors de l'ajout : " + err.message;
-    }
-    submitBtn.disabled = false;
-  });
-
-  // ── Vérification (lecture seule, rien n'est enregistré) ────
-  let lastCheckedRows = [];
-
-  checkForm.addEventListener('submit', e => {
-    e.preventDefault();
-    checkErrMsg.textContent = '';
-    saveListErrMsg.textContent = '';
-    saveListOkMsg.classList.remove('show');
-    saveListName.value = '';
-
-    const rows = checkManager.collectRows();
-    const invalidIndex = rows.findIndex(r => !r.collection || !r.serie || !r.carte);
-    if(invalidIndex !== -1){
-      checkErrMsg.textContent = `Merci de renseigner au moins la Collection, la Série et le nom de la carte pour la carte n°${invalidIndex + 1}.`;
-      checkResults.style.display = 'none';
-      return;
-    }
-
-    let newCount = 0, dupeCount = 0;
-    const results = rows.map(r => {
-      const existing = findDuplicateInStock(r);
-      if(existing){
-        dupeCount++;
-        return { ...r, status: 'dupe', existingQty: Number(existing.quantite) || 0 };
-      }
-      newCount++;
-      return { ...r, status: 'new' };
-    });
-
-    checkSummary.innerHTML = `
-      <span class="check-chip new">${newCount} nouvelle${newCount > 1 ? 's' : ''}</span>
-      <span class="check-chip dupe">${dupeCount} déjà en stock</span>
-    `;
-
-    checkBody.innerHTML = results.map(r => `
-      <tr>
-        <td>${escapeHtml(r.collection)}</td>
-        <td>${escapeHtml(r.serie)}</td>
-        <td>${escapeHtml(r.numCarte || '—')}</td>
-        <td>${escapeHtml(r.carte)}</td>
-        <td>${escapeHtml(r.langue)}</td>
-        <td>${escapeHtml(r.version)}</td>
-        <td class="num">${r.quantite}</td>
-        <td>${r.status === 'new'
-          ? '<span class="status-badge new">Nouvelle</span>'
-          : `<span class="status-badge dupe">Déjà en stock (qté : ${r.existingQty})</span>`}</td>
-      </tr>
-    `).join('');
-
-    lastCheckedRows = rows;
-    checkResults.style.display = 'block';
-  });
-
-  // ── Sauvegarde de la liste vérifiée ─────────────────────────
-  saveListBtn.addEventListener('click', async () => {
-    saveListErrMsg.textContent = '';
-    const name = saveListName.value.trim();
-    if(!name){
-      saveListErrMsg.textContent = "Donne un nom à ta liste avant de la sauvegarder.";
-      return;
-    }
-    if(!lastCheckedRows.length){
-      saveListErrMsg.textContent = "Aucune liste vérifiée à sauvegarder.";
-      return;
-    }
-    saveListBtn.disabled = true;
-    try{
-      await addDoc(collection(db, 'savedLists'), {
-        name,
-        cards: lastCheckedRows,
-        createdAt: serverTimestamp()
-      });
-      saveListOkMsg.textContent = 'Liste sauvegardée ✓';
-      saveListOkMsg.classList.add('show');
-      setTimeout(()=>saveListOkMsg.classList.remove('show'), 2400);
-      saveListName.value = '';
-    }catch(err){
-      saveListErrMsg.textContent = "Erreur lors de la sauvegarde : " + err.message;
-    }
-    saveListBtn.disabled = false;
-  });
-
-  // ── Chargement d'une liste sauvegardée dans le formulaire d'ajout ──
-  function formatListDate(createdAt){
-    if(!createdAt || !createdAt.toDate) return '';
-    return createdAt.toDate().toLocaleDateString('fr-FR');
-  }
-
-  async function openListsModal(){
-    listsModal.classList.add('show');
-    savedListsBody.innerHTML = '<div class="saved-lists-empty">Chargement…</div>';
-    try{
-      const snap = await getDocs(query(collection(db, 'savedLists'), orderBy('createdAt', 'desc')));
-      const lists = [];
-      snap.forEach(d => lists.push({ id: d.id, ...d.data() }));
-      renderSavedLists(lists);
-    }catch(err){
-      savedListsBody.innerHTML = `<div class="saved-lists-empty">Erreur de chargement : ${escapeHtml(err.message)}</div>`;
-    }
-  }
-
-  function closeListsModal(){
-    listsModal.classList.remove('show');
-  }
-
-  function renderSavedLists(lists){
-    if(!lists.length){
-      savedListsBody.innerHTML = '<div class="saved-lists-empty">Aucune liste sauvegardée pour l\'instant.</div>';
-      return;
-    }
-    savedListsBody.innerHTML = lists.map(l => `
-      <div class="saved-list-item" data-id="${l.id}">
-        <div class="saved-list-info">
-          <div class="saved-list-name">${escapeHtml(l.name || 'Sans nom')}</div>
-          <div class="saved-list-meta">${(l.cards || []).length} carte(s)${formatListDate(l.createdAt) ? ' · ' + formatListDate(l.createdAt) : ''}</div>
-        </div>
-        <div class="saved-list-actions">
-          <button type="button" class="btn btn-ghost load-list-btn" data-id="${l.id}">Charger</button>
-          <button type="button" class="del-btn del-list-btn" data-id="${l.id}" title="Supprimer">✕</button>
-        </div>
-      </div>
-    `).join('');
-
-    savedListsBody.querySelectorAll('.load-list-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const list = lists.find(l => l.id === btn.dataset.id);
-        if(!list) return;
-        const cards = list.cards || [];
-        rowsContainer.innerHTML = '';
-        if(cards.length){
-          cards.forEach(c => addManager.addRow(c));
-        } else {
-          addManager.addRow();
-        }
-        closeListsModal();
-      });
-    });
-
-    savedListsBody.querySelectorAll('.del-list-btn').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        if(!confirm('Supprimer cette liste sauvegardée ?')) return;
-        btn.disabled = true;
-        try{
-          await deleteDoc(doc(db, 'savedLists', btn.dataset.id));
-          openListsModal();
-        }catch(err){
-          alert("Erreur lors de la suppression : " + err.message);
-          btn.disabled = false;
-        }
-      });
-    });
-  }
-
-  loadListBtn.addEventListener('click', openListsModal);
-  listsModalCloseBtn.addEventListener('click', closeListsModal);
-  listsModal.addEventListener('click', e => { if(e.target === listsModal) closeListsModal(); });
-
-  importBtn.addEventListener('click', async () => {
-    if(!confirm("Importer les cartes de stock_seed.json vers la base en ligne ? À ne faire qu'une seule fois pour éviter les doublons.")) return;
-    importBtn.disabled = true;
-    importBtn.textContent = "Import en cours…";
-    try{
-      const res = await fetch(SEED_URL);
-      const rows = await res.json();
-      const batchSize = 400;
-      for(let i=0; i<rows.length; i+=batchSize){
-        const batch = writeBatch(db);
-        rows.slice(i, i+batchSize).forEach(row => {
-          const ref = doc(collection(db, 'stock'));
-          batch.set(ref, { ...row, createdAt: serverTimestamp() });
-        });
-        await batch.commit();
-      }
-      importBtn.textContent = "Import terminé ✓";
-      await refreshAll();
-    }catch(err){
-      errMsg.textContent = "Erreur pendant l'import : " + err.message;
-      importBtn.disabled = false;
-      importBtn.textContent = "Importer mon stock existant";
-    }
-  });
 }
-</script>
-</body>
-</html>

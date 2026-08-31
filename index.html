@@ -123,6 +123,18 @@
       border-color: var(--amber);
     }
 
+    #refreshBtn {
+      flex: 0 0 auto;
+      font-size: 15px;
+      padding: 8px 11px;
+    }
+
+    .cache-note {
+      padding: 6px 20px 0;
+      font-size: 11.5px;
+      color: #7C93A2;
+    }
+
     .page-panel {
       margin: 12px 20px 0;
       background: #F6FBFD;
@@ -313,7 +325,9 @@
     <div class="controls">
       <select id="setFilter"></select>
       <button class="toggle-btn" id="missingToggle">Manquantes seulement</button>
+      <button class="toggle-btn" id="refreshBtn" title="Retélécharger la liste des cartes">↻</button>
     </div>
+    <div class="cache-note" id="cacheNote"></div>
 
     <div class="page-panel">
       <div class="holes">
@@ -333,6 +347,7 @@
 <script>
 (function () {
   const STORAGE_KEY = "lokhlass-owned-cards";
+  const CACHE_KEY = "lokhlass-cards-cache";
   const PAGE_SIZE = 9;
 
   let cards = [];
@@ -340,6 +355,7 @@
   let page = 0;
   let setFilter = "Toutes les extensions";
   let missingOnly = false;
+  let cacheDate = null;
 
   const loadingBox = document.getElementById("loadingBox");
   const errorBox = document.getElementById("errorBox");
@@ -354,6 +370,15 @@
   const meterLabel = document.getElementById("meterLabel");
   const meterCount = document.getElementById("meterCount");
   const retryBtn = document.getElementById("retryBtn");
+  const refreshBtn = document.getElementById("refreshBtn");
+  const cacheNote = document.getElementById("cacheNote");
+
+  function renderCacheNote() {
+    if (!cacheDate) { cacheNote.textContent = ""; return; }
+    const d = new Date(cacheDate);
+    const formatted = d.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+    cacheNote.textContent = `Liste des cartes téléchargée le ${formatted} — le site fonctionne ensuite sans connexion.`;
+  }
 
   function naturalNumberKey(numberStr) {
     const match = /^(\d+)/.exec(numberStr || "");
@@ -389,28 +414,77 @@
     }
   }
 
-  async function fetchCards() {
+  async function downloadFromApi() {
+    let all = [];
+    let pageIndex = 1;
+    let totalCount = Infinity;
+    while (all.length < totalCount) {
+      const res = await fetch(`https://api.pokemontcg.io/v2/cards?q=name:lapras&pageSize=250&page=${pageIndex}`);
+      if (!res.ok) throw new Error("Réponse API invalide");
+      const data = await res.json();
+      all = all.concat(data.data || []);
+      totalCount = data.totalCount != null ? data.totalCount : all.length;
+      if (!data.data || data.data.length === 0) break;
+      pageIndex += 1;
+    }
+    all.sort(sortCards);
+    return all;
+  }
+
+  // Ne conserve que les champs utiles à l'affichage, pour un cache léger.
+  function slimCards(list) {
+    return list.map((c) => ({
+      id: c.id,
+      name: c.name,
+      number: c.number,
+      image: c.images && c.images.small,
+      setName: c.set && c.set.name,
+      releaseDate: c.set && c.set.releaseDate,
+    }));
+  }
+
+  async function loadCards(forceRefresh) {
     loadingBox.classList.remove("hidden");
     errorBox.classList.add("hidden");
     appBody.classList.add("hidden");
     try {
-      let all = [];
-      let pageIndex = 1;
-      let totalCount = Infinity;
-      while (all.length < totalCount) {
-        const res = await fetch(`https://api.pokemontcg.io/v2/cards?q=name:lapras&pageSize=250&page=${pageIndex}`);
-        if (!res.ok) throw new Error("Réponse API invalide");
-        const data = await res.json();
-        all = all.concat(data.data || []);
-        totalCount = data.totalCount != null ? data.totalCount : all.length;
-        if (!data.data || data.data.length === 0) break;
-        pageIndex += 1;
+      let list = null;
+      if (!forceRefresh) {
+        try {
+          const cached = await window.storage.get(CACHE_KEY, false);
+          if (cached && cached.value) {
+            const parsed = JSON.parse(cached.value);
+            list = parsed.cards;
+            cacheDate = parsed.downloadedAt;
+          }
+        } catch (e) {
+          // pas de cache pour l'instant, on va télécharger
+        }
       }
-      all.sort(sortCards);
-      cards = all;
+
+      if (!list) {
+        const fresh = await downloadFromApi();
+        list = slimCards(fresh);
+        cacheDate = new Date().toISOString();
+        try {
+          await window.storage.set(CACHE_KEY, JSON.stringify({ cards: list, downloadedAt: cacheDate }), false);
+        } catch (e) {
+          // le site fonctionnera quand même pour cette session
+        }
+      }
+
+      cards = list.map((c) => ({
+        id: c.id,
+        name: c.name,
+        number: c.number,
+        images: { small: c.image },
+        set: { name: c.setName, releaseDate: c.releaseDate },
+      }));
+
       await loadOwned();
       populateSetFilter();
       render();
+      renderCacheNote();
       loadingBox.classList.add("hidden");
       appBody.classList.remove("hidden");
     } catch (e) {
@@ -526,8 +600,9 @@
     render();
   });
 
-  retryBtn.addEventListener("click", fetchCards);
+  retryBtn.addEventListener("click", () => loadCards(false));
+  refreshBtn.addEventListener("click", () => loadCards(true));
 
-  fetchCards().then(updateMeter);
+  loadCards(false).then(updateMeter);
 })();
 </script>
